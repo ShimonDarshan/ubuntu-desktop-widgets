@@ -31,15 +31,6 @@ if [[ $current != *"'$UUID'"* ]]; then
     echo "Enabled $UUID"
 fi
 
-# Bluetooth headphones: reconnect and back to A2DP after logout/login.
-REPO="$(cd "$(dirname "$0")" && pwd)"
-mkdir -p "$HOME/.local/bin" "$HOME/.config/systemd/user"
-ln -sfn "$REPO/scripts/bt-audio-guard.sh" "$HOME/.local/bin/bt-audio-guard"
-ln -sfn "$REPO/systemd/bt-audio-guard.service" "$HOME/.config/systemd/user/bt-audio-guard.service"
-systemctl --user daemon-reload
-systemctl --user enable bt-audio-guard.service >/dev/null 2>&1
-echo "Enabled bt-audio-guard.service"
-
 command -v cava >/dev/null ||
     echo "Note: cava not found; run scripts/install-cava.sh so the visualizer follows the music"
 echo "Log out and back in to load the latest code."

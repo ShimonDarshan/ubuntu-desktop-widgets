@@ -58,13 +58,6 @@ next session gets bad sound until they are reconnected.
 `scripts/gdm-no-bluetooth-audio.sh` turns Bluetooth audio off for the login
 screen only; your session still uses the headphones normally.
 
-Headphones can also drop off entirely at logout. `bt-audio-guard.service`
-(installed by `install.sh`, runs with the graphical session) handles both:
-at logout it remembers which Bluetooth audio devices were connected; at login
-it reconnects them and switches any that came up in the call profile back to
-A2DP (reconnecting once if A2DP isn't offered). A device whose microphone is in
-use is left alone. Logs: `journalctl --user -u bt-audio-guard`.
-
 ## Layout
 
 ```
