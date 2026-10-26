@@ -40,7 +40,6 @@ that check, so the icon still appears for real microphone use.
 ## Install
 
 ```bash
-scripts/gdm-no-bluetooth-audio.sh   # keeps the login screen off Bluetooth headphones (needs sudo)
 scripts/install-cava.sh   # builds the latest cava release into /usr/local (needs sudo)
 ./install.sh              # links the extension, compiles its settings, enables it
 ```
@@ -49,14 +48,6 @@ Then log out and back in: on Wayland, GNOME Shell only loads new extension code
 at login. Run `./install.sh` again after pulling changes, then log in again.
 
 Settings: right-click the card → Settings…, or the Extensions app.
-
-### Bluetooth headphones sound bad after logging out and in
-
-The GDM login screen runs its own PipeWire, grabs connected Bluetooth
-headphones and leaves them in the headset/call profile (mono, 16 kHz), so the
-next session gets bad sound until they are reconnected.
-`scripts/gdm-no-bluetooth-audio.sh` turns Bluetooth audio off for the login
-screen only; your session still uses the headphones normally.
 
 ## Layout
 
