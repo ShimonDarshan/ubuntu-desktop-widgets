@@ -31,6 +31,12 @@ PipeWire input, raw output, mono) only while something is playing and the card
 is shown, and stops it on pause. Without cava the card still works, with still
 bars.
 
+cava is started with `PIPEWIRE_LATENCY=1024/48000` so it never lowers the audio
+buffer size of the output (its own 512-sample request caused crackles on
+Bluetooth headphones). GNOME shows the microphone icon for any recording
+stream; the extension leaves cava's (it only listens to the speakers) out of
+that check, so the icon still appears for real microphone use.
+
 ## Install
 
 ```bash

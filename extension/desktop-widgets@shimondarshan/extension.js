@@ -8,6 +8,7 @@ import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import {hideCavaFromMicIndicator} from './media/micIndicator.js';
 import {MediaWidget} from './media/widget.js';
 
 // DING draws the desktop icons in its own full-screen windows. On Wayland it
@@ -36,10 +37,13 @@ export default class DesktopWidgetsExtension extends Extension {
         Main.layoutManager.connectObject('monitors-changed',
             () => this._media?.restorePosition(), this);
         global.display.connectObject('restacked', () => this._restack(), this);
+        this._restoreMicIndicator = hideCavaFromMicIndicator();
         this._syncMedia();
     }
 
     disable() {
+        this._restoreMicIndicator?.();
+        this._restoreMicIndicator = null;
         global.display.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
         this._settings.disconnectObject(this);

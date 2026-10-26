@@ -16,6 +16,10 @@ const FRAMERATE = 30;
 const RESTART_DELAY_S = 5;
 // cava prints each bar as 0..ASCII_MAX.
 const ASCII_MAX = 1000;
+// cava asks PipeWire for 512-sample buffers, which lowers the quantum of the
+// whole output (crackles on Bluetooth headphones). Ask for PipeWire's default
+// quantum instead; still ~47 updates a second, plenty for 30 fps bars.
+const CAVA_LATENCY = '1024/48000';
 // When the music stops, the bars sink to dots over about half a second.
 const SINK_FACTOR = 0.78;
 const SINK_MS = 33;
@@ -210,8 +214,11 @@ class Visualizer extends St.DrawingArea {
         try {
             GLib.mkdir_with_parents(dir, 0o755);
             GLib.file_set_contents(config, cavaConfig(this._bars));
-            this._proc = Gio.Subprocess.new([this._cava, '-p', config],
-                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+            const launcher = new Gio.SubprocessLauncher({
+                flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE,
+            });
+            launcher.setenv('PIPEWIRE_LATENCY', CAVA_LATENCY, true);
+            this._proc = launcher.spawnv([this._cava, '-p', config]);
         } catch (e) {
             console.error(`desktop-widgets: cannot start cava: ${e.message}`);
             this._scheduleRestart();
