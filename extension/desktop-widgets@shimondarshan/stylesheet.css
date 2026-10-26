@@ -1,0 +1,120 @@
+/* The music card: dark glass, 340px wide, Ubuntu orange for the play button. */
+.dw-media {
+  width: 340px;
+  padding: 14px;
+  spacing: 10px;
+  border-radius: 22px;
+  background-color: rgba(18, 18, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+}
+
+.dw-media-header {
+  spacing: 12px;
+}
+
+.dw-media-art {
+  icon-size: 52px;
+}
+
+.dw-media-title {
+  font-weight: bold;
+  font-size: 11pt;
+}
+
+.dw-media-subtitle {
+  font-size: 9pt;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dw-media-visualizer {
+  height: 48px;
+}
+
+.dw-media-progress {
+  height: 4px;
+  -barlevel-height: 4px;
+  -barlevel-background-color: rgba(255, 255, 255, 0.18);
+  -barlevel-active-background-color: #e95420;
+  -barlevel-overdrive-color: #e95420;
+}
+
+.dw-media-controls {
+  spacing: 4px;
+}
+
+.dw-media-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  color: #ffffff;
+}
+
+.dw-media-button StIcon {
+  icon-size: 16px;
+}
+
+.dw-media-button:hover,
+.dw-media-button:focus {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.dw-media-button:insensitive {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.dw-media-play {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  background-color: #e95420;
+  color: #ffffff;
+}
+
+.dw-media-play StIcon {
+  icon-size: 18px;
+}
+
+.dw-media-play:hover,
+.dw-media-play:focus {
+  background-color: #f0703f;
+}
+
+.dw-media-mute {
+  margin-left: 8px;
+}
+
+.dw-media-slider {
+  height: 20px;
+  min-width: 80px;
+  -barlevel-height: 4px;
+  -barlevel-background-color: rgba(255, 255, 255, 0.18);
+  -barlevel-active-background-color: #ffffff;
+  -barlevel-overdrive-color: #ffffff;
+  -slider-handle-radius: 7px;
+  color: #ffffff;
+}
+
+.dw-media-percent {
+  min-width: 38px;
+  text-align: right;
+  font-size: 9pt;
+  font-feature-settings: "tnum";
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dw-media-dots {
+  spacing: 6px;
+}
+
+.dw-media-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+.dw-media-dot:checked {
+  background-color: #ffffff;
+}

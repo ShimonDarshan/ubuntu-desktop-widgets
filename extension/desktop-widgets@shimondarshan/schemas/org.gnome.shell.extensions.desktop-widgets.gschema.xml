@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.desktop-widgets"
+          path="/org/gnome/shell/extensions/desktop-widgets/">
+    <key name="media-visible" type="b">
+      <default>true</default>
+      <summary>Show the music card</summary>
+    </key>
+    <key name="media-on-top" type="b">
+      <default>false</default>
+      <summary>Keep the music card above app windows</summary>
+      <description>When off, the card sits on the desktop and app windows cover it.</description>
+    </key>
+    <key name="media-locked" type="b">
+      <default>false</default>
+      <summary>Stop the music card from being dragged</summary>
+    </key>
+    <key name="media-position" type="(ii)">
+      <default>(-1, -1)</default>
+      <summary>Top-left corner of the music card</summary>
+      <description>In screen pixels. (-1, -1) puts it near the top-right corner of the primary monitor.</description>
+    </key>
+    <key name="visualizer-style" type="s">
+      <choices>
+        <choice value="rainbow"/>
+        <choice value="mirror"/>
+        <choice value="wave"/>
+      </choices>
+      <default>'rainbow'</default>
+      <summary>Visualizer style</summary>
+    </key>
+    <key name="visualizer-bars" type="i">
+      <range min="12" max="64"/>
+      <default>28</default>
+      <summary>Number of visualizer bars</summary>
+    </key>
+  </schema>
+</schemalist>
