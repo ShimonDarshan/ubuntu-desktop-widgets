@@ -15,7 +15,10 @@ Web tab in Firefox or Chrome.
 - With several players, dots under the card switch between them; a player that
   starts playing takes over
 - Drag it anywhere with the left button; the spot is kept across logins
-- Right-click: lock position, always on top, visualizer style, settings, hide
+- Right-click: lock position, always on top, transparent background,
+  visualizer style, settings, hide
+- Background opacity from 0% (only the art, text, bars and buttons on the
+  wallpaper) to 100%, in Settings
 
 By default the card sits on the desktop: above the wallpaper and desktop icons,
 below app windows. "Always on top" keeps it above the windows instead.

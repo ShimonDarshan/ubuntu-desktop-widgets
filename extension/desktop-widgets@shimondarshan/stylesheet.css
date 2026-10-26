@@ -1,4 +1,6 @@
-/* The music card: dark glass, 340px wide, Ubuntu orange for the play button. */
+/* The music card: dark glass, 340px wide, Ubuntu orange for the play button.
+ * No box-shadow: it drew a wide blur around the card and, while dragging,
+ * left stale blurred pixels behind. */
 .dw-media {
   width: 340px;
   padding: 14px;
@@ -6,7 +8,6 @@
   border-radius: 22px;
   background-color: rgba(18, 18, 18, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
   color: #ffffff;
 }
 
@@ -117,4 +118,19 @@
 
 .dw-media-dot:checked {
   background-color: #ffffff;
+}
+
+/* Background opacity below 30%: shadows keep text and icons readable on the
+ * wallpaper, and buttons get a faint dark circle on hover. */
+.dw-media-transparent StLabel {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+.dw-media-transparent StIcon {
+  icon-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+.dw-media-transparent .dw-media-button:hover,
+.dw-media-transparent .dw-media-button:focus {
+  background-color: rgba(0, 0, 0, 0.35);
 }

@@ -21,6 +21,13 @@ import {STYLES, Visualizer} from './visualizer.js';
 
 const STYLE_LABELS = {rainbow: 'Rainbow bars', mirror: 'Mirror', wave: 'Wave'};
 const POSITION_POLL_S = 1;
+// Background color and edge of the card (stylesheet.css); the opacity setting
+// scales both. Below SHADOW_BELOW percent the text gets a shadow to stay
+// readable on bright wallpapers.
+const BACKGROUND_RGB = '18, 18, 18';
+const EDGE_ALPHA_AT_DEFAULT = 0.14;
+const DEFAULT_OPACITY = 72;
+const SHADOW_BELOW = 30;
 // Default distance from the top-right corner of the primary monitor.
 const MARGIN = 40;
 
@@ -78,6 +85,7 @@ class MediaWidget extends St.BoxLayout {
             'changed::visualizer-bars', () => this._syncSettings(),
             'changed::media-locked', () => this._syncSettings(),
             'changed::media-on-top', () => this._syncSettings(),
+            'changed::media-background-opacity', () => this._syncSettings(),
             'changed::media-position', () => this.restorePosition(), this);
         this.connect('notify::mapped', () => this._syncVisualizer());
         this.connect('destroy', () => this._onDestroy());
@@ -188,8 +196,13 @@ class MediaWidget extends St.BoxLayout {
         this._lockItem.connect('toggled', (_i, state) => this._settings.set_boolean('media-locked', state));
         this._onTopItem = new PopupMenu.PopupSwitchMenuItem('Always on top', false);
         this._onTopItem.connect('toggled', (_i, state) => this._settings.set_boolean('media-on-top', state));
+        // Off brings back the opacity used before it was turned on.
+        this._transparentItem = new PopupMenu.PopupSwitchMenuItem('Transparent background', false);
+        this._transparentItem.connect('toggled', (_i, state) =>
+            this._settings.set_int('media-background-opacity', state ? 0 : this._lastOpacity ?? DEFAULT_OPACITY));
         this._menu.addMenuItem(this._lockItem);
         this._menu.addMenuItem(this._onTopItem);
+        this._menu.addMenuItem(this._transparentItem);
 
         this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Visualizer'));
         this._styleItems = new Map();
@@ -313,6 +326,22 @@ class MediaWidget extends St.BoxLayout {
             item.setOrnament(key === style ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
         this._lockItem.setToggleState(this._settings.get_boolean('media-locked'));
         this._onTopItem.setToggleState(this._settings.get_boolean('media-on-top'));
+        this._syncBackground();
+    }
+
+    _syncBackground() {
+        const opacity = this._settings.get_int('media-background-opacity');
+        if (opacity > 0)
+            this._lastOpacity = opacity;
+        const alpha = opacity / 100;
+        const edge = Math.min(1, EDGE_ALPHA_AT_DEFAULT * opacity / DEFAULT_OPACITY);
+        this.set_style(`background-color: rgba(${BACKGROUND_RGB}, ${alpha}); ` +
+            `border-color: rgba(255, 255, 255, ${edge.toFixed(3)});`);
+        if (opacity < SHADOW_BELOW)
+            this.add_style_class_name('dw-media-transparent');
+        else
+            this.remove_style_class_name('dw-media-transparent');
+        this._transparentItem.setToggleState(opacity === 0);
     }
 
     _naturalSize() {

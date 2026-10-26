@@ -20,6 +20,12 @@
       <summary>Top-left corner of the music card</summary>
       <description>In screen pixels. (-1, -1) puts it near the top-right corner of the primary monitor.</description>
     </key>
+    <key name="media-background-opacity" type="i">
+      <range min="0" max="100"/>
+      <default>72</default>
+      <summary>Opacity of the music card background, in percent</summary>
+      <description>0 leaves only the art, text, bars and buttons on the wallpaper.</description>
+    </key>
     <key name="visualizer-style" type="s">
       <choices>
         <choice value="rainbow"/>

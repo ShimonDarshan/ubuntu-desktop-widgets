@@ -26,6 +26,11 @@ export default class DesktopWidgetsPreferences extends ExtensionPreferences {
         card.add(switchRow(settings, 'media-on-top', 'Always on top',
             'When off, the card sits on the desktop and windows cover it'));
         card.add(switchRow(settings, 'media-locked', 'Lock position'));
+        const opacity = Adw.SpinRow.new_with_range(0, 100, 5);
+        opacity.title = 'Background opacity';
+        opacity.subtitle = '0% leaves only the art, text, bars and buttons on the wallpaper';
+        settings.bind('media-background-opacity', opacity, 'value', Gio.SettingsBindFlags.DEFAULT);
+        card.add(opacity);
         const reset = new Gtk.Button({label: 'Reset', valign: Gtk.Align.CENTER});
         reset.connect('clicked', () => settings.reset('media-position'));
         const resetRow = new Adw.ActionRow({
