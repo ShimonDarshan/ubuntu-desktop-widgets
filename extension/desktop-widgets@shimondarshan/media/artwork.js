@@ -1,6 +1,7 @@
-// Cover art for the music card. Remote covers (Spotify sends https://
-// addresses) are copied to ~/.cache/desktop-widgets/art, since St draws a
-// background image with round corners only from a file. Each cover also gives
+// Cover art for the music card. Every cover is saved, shrunk to SIZE pixels,
+// in ~/.cache/desktop-widgets/art: St draws a background image with round
+// corners only from a file, Spotify sends https:// addresses, and browsers
+// delete their cover file as soon as the track changes. Each cover also gives
 // two colors: the card's tint and the visualizer run from one to the other.
 
 import GdkPixbuf from 'gi://GdkPixbuf';
@@ -13,6 +14,8 @@ import {hsl, toHsl} from './color.js';
 const KEEP_FILES = 100;
 // Results kept in memory.
 const KEEP_RESULTS = 50;
+// Saved covers are at most SIZE x SIZE pixels (twice the 64px on the card).
+const SIZE = 128;
 // The cover is shrunk to SAMPLE x SAMPLE pixels to pick its colors.
 const SAMPLE = 32;
 // Hue buckets of 30 degrees; the second color must be at least MIN_APART
@@ -112,9 +115,19 @@ export class Artwork {
 
     async _load(uri) {
         try {
-            const path = await this._localPath(uri);
-            const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, SAMPLE, SAMPLE, false);
-            return {path, colors: pickColors(pixbuf)};
+            const name = GLib.compute_checksum_for_string(GLib.ChecksumType.SHA1, uri, -1);
+            const path = GLib.build_filenamev([this._dir, `${name}.png`]);
+            let pixbuf;
+            if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(path);
+            } else {
+                const bytes = await this._read(Gio.File.new_for_uri(uri));
+                pixbuf = GdkPixbuf.Pixbuf.new_from_stream_at_scale(
+                    Gio.MemoryInputStream.new_from_bytes(bytes), SIZE, SIZE, true, null);
+                pixbuf.savev(path, 'png', [], []);
+            }
+            const sample = pixbuf.scale_simple(SAMPLE, SAMPLE, GdkPixbuf.InterpType.BILINEAR);
+            return {path, colors: pickColors(sample)};
         } catch (e) {
             if (!isCancelled(e))
                 console.warn(`desktop-widgets: cover ${uri}: ${e.message}`);
@@ -123,16 +136,8 @@ export class Artwork {
         }
     }
 
-    // Local covers are used where they are; remote ones are downloaded once.
-    async _localPath(uri) {
-        const file = Gio.File.new_for_uri(uri);
-        if (file.is_native())
-            return file.get_path();
-        const name = GLib.compute_checksum_for_string(GLib.ChecksumType.SHA1, uri, -1);
-        const path = GLib.build_filenamev([this._dir, name]);
-        if (GLib.file_test(path, GLib.FileTest.EXISTS))
-            return path;
-        const bytes = await new Promise((resolve, reject) => {
+    _read(file) {
+        return new Promise((resolve, reject) => {
             file.load_bytes_async(this._cancellable, (_f, res) => {
                 try {
                     resolve(file.load_bytes_finish(res)[0]);
@@ -141,8 +146,6 @@ export class Artwork {
                 }
             });
         });
-        GLib.file_set_contents(path, bytes.toArray());
-        return path;
     }
 
     _prune() {
