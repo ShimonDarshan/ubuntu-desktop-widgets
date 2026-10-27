@@ -20,10 +20,15 @@
       <default>false</default>
       <summary>Stop the music card from being dragged</summary>
     </key>
+    <key name="media-positions" type="a{s(sii)}">
+      <default>{}</default>
+      <summary>Top-left corner of the music card, per set of monitors</summary>
+      <description>Maps the names of the plugged-in monitors to the monitor holding the card and the card's offset from that monitor's top-left corner, in pixels. With no entry the card goes near the top-right corner of the primary monitor.</description>
+    </key>
     <key name="media-position" type="(ii)">
       <default>(-1, -1)</default>
-      <summary>Top-left corner of the music card</summary>
-      <description>In screen pixels. (-1, -1) puts it near the top-right corner of the primary monitor.</description>
+      <summary>Top-left corner of the music card (old)</summary>
+      <description>In screen pixels; moved into media-positions on the next start and reset to (-1, -1).</description>
     </key>
     <key name="media-background-opacity" type="i">
       <range min="0" max="100"/>

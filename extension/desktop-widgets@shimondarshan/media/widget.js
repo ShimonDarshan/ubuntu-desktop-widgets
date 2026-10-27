@@ -1,7 +1,8 @@
 // The music card: cover art, title, artist and app, the visualizer, a
 // timeline you can drag to seek, play controls and a speaker button for the
 // main volume. The card's top is tinted with the cover's color. Drag it
-// anywhere with the left button (the spot is saved); right-click for lock,
+// anywhere with the left button (the spot is saved for the monitor it's on
+// and the set of plugged-in monitors); right-click for lock,
 // always on top, visualizer style, settings and hide. The X that shows on
 // hover hides the card too; the music keeps playing and the music icon in the
 // top bar brings the card back.
@@ -19,6 +20,7 @@ import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {Artwork, neutralColors} from './artwork.js';
 import {css, mix} from './color.js';
+import {describeMonitors} from './monitors.js';
 import {Players} from './mpris.js';
 import {Output} from './volume.js';
 import {STYLES, Visualizer} from './visualizer.js';
@@ -89,6 +91,9 @@ class MediaWidget extends St.BoxLayout {
         this._positionUs = 0;
         this._seeking = false;
         this._artwork = new Artwork();
+        this._cancellable = new Gio.Cancellable();
+        this._monitors = null;
+        this._restoreSerial = 0;
 
         this._buildHeader();
         this._visualizer = new Visualizer();
@@ -116,27 +121,66 @@ class MediaWidget extends St.BoxLayout {
             'changed::media-locked', () => this._syncSettings(),
             'changed::media-on-top', () => this._syncSettings(),
             'changed::media-background-opacity', () => this._syncSettings(),
-            'changed::media-position', () => this.restorePosition(), this);
+            'changed::media-positions', () => this.restorePosition(), this);
         this.connect('notify::mapped', () => this._syncVisualizer());
         this.connect('notify::hover', () => this._syncClose());
         this.connect('destroy', () => this._onDestroy());
+        // Hidden until restorePosition() knows where it goes.
+        this.hide();
 
         this._syncSettings();
         this._sync();
         this._syncVolume();
     }
 
-    // Puts the card at its saved spot, or the top-right corner the first
-    // time, kept fully on a monitor. Call once it is on the stage.
-    restorePosition() {
+    // Puts the card on the monitor and at the spot saved for the plugged-in
+    // monitors, or the top-right corner when there is none, kept fully on a
+    // monitor. Call once it is on the stage, and again when monitors change.
+    async restorePosition() {
+        const serial = ++this._restoreSerial;
+        const monitors = await describeMonitors(this._cancellable);
+        if (serial !== this._restoreSerial || this._cancellable.is_cancelled() || this._grab)
+            return;
+        this._monitors = monitors;
+        this._migratePosition();
         const [w, h] = this._naturalSize();
-        let [x, y] = this._settings.get_value('media-position').deepUnpack();
-        if (x < 0 || y < 0) {
-            const monitor = Main.layoutManager.primaryMonitor;
-            x = monitor.x + monitor.width - w - MARGIN;
-            y = monitor.y + Main.panel.height + MARGIN;
+        const [name, dx, dy] = (monitors &&
+            this._settings.get_value('media-positions').deepUnpack()[monitors.setup]) ?? [];
+        const monitor = monitors?.monitors.find(m => m.name === name);
+        let x, y;
+        if (monitor) {
+            [x, y] = [monitor.x + dx, monitor.y + dy];
+        } else {
+            const primary = Main.layoutManager.primaryMonitor;
+            x = primary.x + primary.width - w - MARGIN;
+            y = primary.y + Main.panel.height + MARGIN;
         }
         this.set_position(...this._clamp(x, y, w, h));
+        this.show();
+    }
+
+    // Saves (x, y) as an offset from the corner of the monitor holding the
+    // card, for the plugged-in monitors only. Dropped when the monitors
+    // changed and restorePosition() hasn't caught up yet.
+    _savePosition(x, y, w = this.width, h = this.height) {
+        const {x: mx, y: my} = this._monitorAt(x, y, w, h);
+        const monitor = this._monitors?.monitors.find(m => m.x === mx && m.y === my);
+        if (!monitor)
+            return;
+        const positions = this._settings.get_value('media-positions').deepUnpack();
+        positions[this._monitors.setup] = [monitor.name, x - mx, y - my];
+        this._settings.set_value('media-positions', new GLib.Variant('a{s(sii)}', positions));
+    }
+
+    // Moves a spot saved by older versions, in screen coordinates, to the
+    // monitors plugged in now.
+    _migratePosition() {
+        const [x, y] = this._settings.get_value('media-position').deepUnpack();
+        if (x < 0 || y < 0 || !this._monitors)
+            return;
+        this._settings.reset('media-position');
+        const [w, h] = this._naturalSize();
+        this._savePosition(...this._clamp(x, y, w, h), w, h);
     }
 
     vfunc_button_press_event(event) {
@@ -167,7 +211,7 @@ class MediaWidget extends St.BoxLayout {
         this._endDrag();
         const [x, y] = this._clamp(this.x, this.y, this.width, this.height);
         this.set_position(x, y);
-        this._settings.set_value('media-position', new GLib.Variant('(ii)', [x, y]));
+        this._savePosition(x, y);
         return Clutter.EVENT_STOP;
     }
 
@@ -561,14 +605,19 @@ class MediaWidget extends St.BoxLayout {
         return [w, h];
     }
 
-    // Keeps a w x h box at (x, y) fully on the monitor holding its center, or
-    // on the primary monitor when its center is on none.
-    _clamp(x, y, w, h) {
+    // The monitor holding the center of a w x h box at (x, y), or the
+    // primary monitor when its center is on none.
+    _monitorAt(x, y, w, h) {
         const cx = x + w / 2;
         const cy = y + h / 2;
-        const monitor = Main.layoutManager.monitors.find(m =>
+        return Main.layoutManager.monitors.find(m =>
             cx >= m.x && cx < m.x + m.width && cy >= m.y && cy < m.y + m.height) ??
             Main.layoutManager.primaryMonitor;
+    }
+
+    // Keeps a w x h box at (x, y) fully on _monitorAt().
+    _clamp(x, y, w, h) {
+        const monitor = this._monitorAt(x, y, w, h);
         return [
             Math.round(Math.max(monitor.x, Math.min(x, monitor.x + monitor.width - w))),
             Math.round(Math.max(monitor.y, Math.min(y, monitor.y + monitor.height - h))),
@@ -581,6 +630,7 @@ class MediaWidget extends St.BoxLayout {
     }
 
     _onDestroy() {
+        this._cancellable.cancel();
         this._endDrag();
         for (const id of ['_positionId', '_seekDelayId']) {
             if (this[id]) {

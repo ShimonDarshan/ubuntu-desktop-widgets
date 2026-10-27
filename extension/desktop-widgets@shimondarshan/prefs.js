@@ -34,10 +34,13 @@ export default class DesktopWidgetsPreferences extends ExtensionPreferences {
         settings.bind('media-background-opacity', opacity, 'value', Gio.SettingsBindFlags.DEFAULT);
         card.add(opacity);
         const reset = new Gtk.Button({label: 'Reset', valign: Gtk.Align.CENTER});
-        reset.connect('clicked', () => settings.reset('media-position'));
+        reset.connect('clicked', () => {
+            settings.reset('media-position');
+            settings.reset('media-positions');
+        });
         const resetRow = new Adw.ActionRow({
             title: 'Position',
-            subtitle: 'Drag the card to move it; reset puts it back in the top-right corner',
+            subtitle: 'Drag the card to move it; its spot is kept for each set of monitors. Reset puts it back in the top-right corner',
         });
         resetRow.add_suffix(reset);
         card.add(resetRow);

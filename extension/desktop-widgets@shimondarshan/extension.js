@@ -5,6 +5,7 @@
 // (panel/indicator.js) brings the card above the windows for a while: until
 // the icon is clicked again or an app window gets the focus.
 
+import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -13,6 +14,10 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {hideCavaFromMicIndicator} from './media/micIndicator.js';
 import {MediaWidget} from './media/widget.js';
 import {MediaIndicator} from './panel/indicator.js';
+
+// Monitors can change a few times in a row while they are plugged in; the
+// card moves once they have been still this long.
+const MONITORS_SETTLE_MS = 300;
 
 // DING draws the desktop icons in its own full-screen windows. On Wayland it
 // names them "Desktop Icons <n>", or puts "@!x,y;<flags>" in the title with B
@@ -39,7 +44,7 @@ export default class DesktopWidgetsExtension extends Extension {
             'changed::media-on-top', () => this._place(),
             'changed::panel-icon-visible', () => this._syncIndicator(), this);
         Main.layoutManager.connectObject('monitors-changed',
-            () => this._media?.restorePosition(), this);
+            () => this._onMonitorsChanged(), this);
         global.display.connectObject(
             'restacked', () => this._restack(),
             'notify::focus-window', () => this._onFocusChanged(), this);
@@ -57,8 +62,22 @@ export default class DesktopWidgetsExtension extends Extension {
         global.display.disconnectObject(this);
         Main.layoutManager.disconnectObject(this);
         this._settings.disconnectObject(this);
+        if (this._monitorsId) {
+            GLib.source_remove(this._monitorsId);
+            this._monitorsId = 0;
+        }
         this._destroyMedia();
         this._settings = null;
+    }
+
+    _onMonitorsChanged() {
+        if (this._monitorsId)
+            GLib.source_remove(this._monitorsId);
+        this._monitorsId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, MONITORS_SETTLE_MS, () => {
+            this._monitorsId = 0;
+            this._media?.restorePosition();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _syncIndicator() {
