@@ -76,6 +76,11 @@ export default class DesktopWidgetsPreferences extends ExtensionPreferences {
         }));
         page.add(visualizer);
 
+        const bluetooth = new Adw.PreferencesGroup({title: 'Bluetooth headphones'});
+        bluetooth.add(switchRow(settings, 'bluetooth-audio-fix', 'Fix sound after login',
+            'Logging out can leave headphones in call mode (bad sound); headphones last used for music are switched back. Calls are left alone'));
+        page.add(bluetooth);
+
         window.add(page);
     }
 }

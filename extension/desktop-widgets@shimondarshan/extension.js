@@ -3,7 +3,9 @@
 // and the desktop icons (DING) but below every app window, or, with "always on
 // top", above the windows like the top panel. The music icon in the top bar
 // (panel/indicator.js) brings the card above the windows for a while: until
-// the icon is clicked again or an app window gets the focus.
+// the icon is clicked again or an app window gets the focus. It also puts
+// Bluetooth headphones back in music mode when the login screen left them in
+// call mode (media/bluetoothAudio.js).
 
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
@@ -11,6 +13,7 @@ import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import {BluetoothAudioFixer} from './media/bluetoothAudio.js';
 import {hideCavaFromMicIndicator} from './media/micIndicator.js';
 import {MediaWidget} from './media/widget.js';
 import {MediaIndicator} from './panel/indicator.js';
@@ -42,7 +45,8 @@ export default class DesktopWidgetsExtension extends Extension {
         this._settings.connectObject(
             'changed::media-visible', () => this._syncMedia(),
             'changed::media-on-top', () => this._place(),
-            'changed::panel-icon-visible', () => this._syncIndicator(), this);
+            'changed::panel-icon-visible', () => this._syncIndicator(),
+            'changed::bluetooth-audio-fix', () => this._syncBluetoothAudio(), this);
         Main.layoutManager.connectObject('monitors-changed',
             () => this._onMonitorsChanged(), this);
         global.display.connectObject(
@@ -52,11 +56,14 @@ export default class DesktopWidgetsExtension extends Extension {
         this._peek = false;
         this._syncMedia();
         this._syncIndicator();
+        this._syncBluetoothAudio();
     }
 
     disable() {
         this._indicator?.destroy();
         this._indicator = null;
+        this._bluetoothAudio?.destroy();
+        this._bluetoothAudio = null;
         this._restoreMicIndicator?.();
         this._restoreMicIndicator = null;
         global.display.disconnectObject(this);
@@ -78,6 +85,15 @@ export default class DesktopWidgetsExtension extends Extension {
             this._media?.restorePosition();
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    _syncBluetoothAudio() {
+        if (!this._settings.get_boolean('bluetooth-audio-fix')) {
+            this._bluetoothAudio?.destroy();
+            this._bluetoothAudio = null;
+        } else {
+            this._bluetoothAudio ??= new BluetoothAudioFixer(this._settings);
+        }
     }
 
     _syncIndicator() {

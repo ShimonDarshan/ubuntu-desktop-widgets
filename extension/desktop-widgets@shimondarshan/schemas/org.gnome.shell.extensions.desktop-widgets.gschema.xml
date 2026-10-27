@@ -51,5 +51,15 @@
       <default>28</default>
       <summary>Number of visualizer bars</summary>
     </key>
+    <key name="bluetooth-audio-fix" type="b">
+      <default>true</default>
+      <summary>Put Bluetooth headphones back in music mode after login</summary>
+      <description>The login screen can leave headphones in the call profile (HFP, mono 16 kHz). Shortly after a login or unlock, headphones last used for music are switched back, reconnecting once if needed. Headphones last used for calls, or whose microphone is recording, are left alone.</description>
+    </key>
+    <key name="bluetooth-audio-profiles" type="a{ss}">
+      <default>{}</default>
+      <summary>Last profile of each Bluetooth headphone</summary>
+      <description>Maps Bluetooth addresses to the last music or call profile they had during a session.</description>
+    </key>
   </schema>
 </schemalist>
