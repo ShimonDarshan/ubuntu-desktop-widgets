@@ -47,16 +47,6 @@ function isCancelled(e) {
     return e instanceof GLib.Error && e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED);
 }
 
-function hostOf(url) {
-    if (!url)
-        return '';
-    try {
-        return GLib.Uri.parse(url, GLib.UriFlags.NONE).get_host()?.toLowerCase() ?? '';
-    } catch {
-        return '';
-    }
-}
-
 class Player extends Signals.EventEmitter {
     constructor(busName) {
         super();
@@ -64,7 +54,6 @@ class Player extends Signals.EventEmitter {
         this.title = '';
         this.artists = [];
         this.artUrl = '';
-        this.url = '';
         this.trackId = '';
         this.lengthUs = 0;
         this.status = 'Stopped';
@@ -100,18 +89,6 @@ class Player extends Signals.EventEmitter {
     // The app name to show under the title: "Spotify", "Firefox", ...
     get appName() {
         return this.app?.get_name() ?? this.identity;
-    }
-
-    // Where the music comes from, for the visualizer colors: 'youtube' or
-    // 'spotify' for those sites (browsers send the tab's address as
-    // xesam:url) and the Spotify app, 'local' for everything else.
-    get source() {
-        const host = hostOf(this.url);
-        if (/(^|\.)(youtube\.com|youtu\.be)$/.test(host))
-            return 'youtube';
-        if (/(^|\.)spotify\.com$/.test(host) || this.busName.toLowerCase().includes('spotify'))
-            return 'spotify';
-        return 'local';
     }
 
     playPause() {
@@ -187,7 +164,6 @@ class Player extends Signals.EventEmitter {
             ? artists : [];
         this.title = typeof metadata['xesam:title'] === 'string' ? metadata['xesam:title'] : '';
         this.artUrl = typeof metadata['mpris:artUrl'] === 'string' ? metadata['mpris:artUrl'] : '';
-        this.url = typeof metadata['xesam:url'] === 'string' ? metadata['xesam:url'] : '';
         this.trackId = typeof metadata['mpris:trackid'] === 'string' ? metadata['mpris:trackid'] : '';
         this.lengthUs = Number(metadata['mpris:length']) || 0;
         this.status = this._player.PlaybackStatus ?? 'Stopped';

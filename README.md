@@ -12,8 +12,9 @@ Web tab in Firefox or Chrome.
 - A timeline with elapsed and remaining time; drag it (or scroll on it) to
   jump in the song. A bubble shows where it will land; it jumps on release.
 - Colors from the cover: the top of the card and the visualizer
-  take the cover's two strongest colors. Without a cover they follow the
-  source (red for YouTube, green for Spotify, white for local players).
+  take the cover's two strongest colors. Black-and-white or faded covers give
+  light and mid grays in the cover's tint; without a cover they are white and
+  silver.
 - A speaker button for the main volume (the same output as the top-right
   system menu): click to mute, scroll on it to change the volume
 - A visualizer that follows the music, in four styles: halo bars, rainbow
@@ -23,6 +24,8 @@ Web tab in Firefox or Chrome.
 - Drag it anywhere with the left button; the spot is kept across logins
 - Right-click: lock position, always on top, transparent background,
   visualizer style, settings, hide
+- An X in the top-right corner (shown while the pointer is on the card) hides
+  the card; the music keeps playing
 - Background opacity from 0% (only the art, text, bars and buttons on the
   wallpaper) to 100%, in Settings
 
@@ -32,7 +35,8 @@ below app windows. "Always on top" keeps it above the windows instead.
 When windows cover the card, click the music icon in the top bar: the card
 comes above them (the icon shows pressed) and works as usual. Click the icon
 again, or click any app window, to send it back to the desktop. If the card was
-hidden, the icon shows it. The icon can be turned off in Settings.
+hidden (with the X or the menu), the icon brings it back, and it stays until
+it is hidden again. The icon can be turned off in Settings.
 
 ### How the visualizer works
 

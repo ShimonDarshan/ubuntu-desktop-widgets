@@ -1,9 +1,8 @@
 // Music visualizer: thin halo bars (the default), rounded pill bars, mirror
 // or wave. The colors come from the cover (see artwork.js), running from its
-// first color on the left to its second on the right. Without a cover they
-// follow where the music comes from: reds for YouTube, greens for Spotify,
-// white for the laptop's own players. Before any player shows up the bars
-// keep the rainbow (orange -> purple). Bar heights come from cava, which only
+// first color on the left to its second on the right; without a cover they
+// are white and silver. Before any player shows up the bars keep the rainbow
+// (orange -> purple). Bar heights come from cava, which only
 // listens to what the speakers play; it never changes the sound. cava runs
 // only while the visualizer is active (music playing, widget shown).
 
@@ -64,26 +63,9 @@ function midColor(x) {
     return hsl((hue + Math.max(0, hue * 0.35 - 5)) / 2, 0.9, 0.52);
 }
 
-// Per source: base, mid and top colors, like the rainbow's, with x the bar's
-// place from 0 (left) to 1 (right).
-const PALETTES = {
-    rainbow: {base: baseColor, mid: midColor, top: topColor},
-    youtube: {
-        base: x => hsl(345 + 15 * x, 0.85, 0.42),
-        mid: x => hsl(352 + 10 * x, 0.9, 0.5),
-        top: x => hsl(2 + 6 * x, 0.95, 0.6),
-    },
-    spotify: {
-        base: x => hsl(150 - 10 * x, 0.75, 0.36),
-        mid: x => hsl(143 - 6 * x, 0.73, 0.44),
-        top: x => hsl(135 - 5 * x, 0.75, 0.6),
-    },
-    local: {
-        base: x => hsl(0, 0, 0.62 + 0.06 * x),
-        mid: x => hsl(0, 0, 0.8 + 0.04 * x),
-        top: () => hsl(0, 0, 1),
-    },
-};
+// Base, mid and top colors, with x the bar's place from 0 (left) to 1
+// (right).
+const RAINBOW = {base: baseColor, mid: midColor, top: topColor};
 
 // From the cover's two colors: darker at the base, lighter at the top.
 function coverPalette([first, second]) {
@@ -93,12 +75,6 @@ function coverPalette([first, second]) {
         mid: at,
         top: x => mix(at(x), [1, 1, 1], 0.35),
     };
-}
-
-// The card's accent for a source ('youtube', 'spotify', 'local'), used while
-// there is no cover; null for an unknown one.
-export function sourceColor(source) {
-    return PALETTES[source] ? PALETTES[source].top(0.5) : null;
 }
 
 function findCava() {
@@ -112,8 +88,7 @@ class Visualizer extends St.DrawingArea {
     _init(params) {
         super._init({style_class: 'dw-media-visualizer', x_expand: true, ...params});
         this._style = 'halo';
-        this._sourcePalette = PALETTES.rainbow;
-        this._coverPalette = null;
+        this._palette = RAINBOW;
         this._bars = 28;
         this._values = new Array(this._bars).fill(0);
         this._active = false;
@@ -128,24 +103,11 @@ class Visualizer extends St.DrawingArea {
         this.queue_repaint();
     }
 
-    // 'youtube', 'spotify' or 'local' (see Player.source); null keeps the
-    // rainbow. Used while there are no cover colors.
-    setSource(source) {
-        const palette = PALETTES[source] ?? PALETTES.rainbow;
-        if (palette === this._sourcePalette)
-            return;
-        this._sourcePalette = palette;
-        this.queue_repaint();
-    }
-
-    // The cover's [first, second] colors, or null to use the source's.
+    // The [first, second] colors to run from left to right, or null for the
+    // rainbow.
     setColors(colors) {
-        this._coverPalette = colors ? coverPalette(colors) : null;
+        this._palette = colors ? coverPalette(colors) : RAINBOW;
         this.queue_repaint();
-    }
-
-    get _palette() {
-        return this._coverPalette ?? this._sourcePalette;
     }
 
     setBarCount(bars) {

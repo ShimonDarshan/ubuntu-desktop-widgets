@@ -3,6 +3,8 @@
 // corners only from a file, Spotify sends https:// addresses, and browsers
 // delete their cover file as soon as the track changes. Each cover also gives
 // two colors: the card's tint and the visualizer run from one to the other.
+// Black-and-white and faded covers give light and mid grays, tinted like the
+// cover.
 
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
@@ -31,20 +33,32 @@ function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
 }
 
+// Most a gray cover's tint may show.
+const MAX_GRAY_TINT = 0.2;
+
 // Vivid, mid-light versions that read well on the dark card.
 function tame(rgb) {
     const [h, s, l] = toHsl(rgb);
     return hsl(h, clamp(s, 0.45, 0.85), clamp(l, 0.6, 0.72));
 }
 
-// The two strongest colors of the cover, or null for a gray one. Each pixel
-// counts by how vivid it is; near-black, near-white and gray pixels don't
-// count.
+// White and silver, tinted by hue h and saturation s: the colors of a gray
+// cover, and of no cover at all with the defaults.
+export function neutralColors(h = 0, s = 0) {
+    const tint = Math.min(s, MAX_GRAY_TINT);
+    return [hsl(h, tint, 0.9), hsl(h, tint, 0.68)];
+}
+
+// The two strongest colors of the cover. Each pixel counts by how vivid it
+// is; near-black, near-white and gray pixels don't count. A cover without
+// enough vivid pixels gives neutral colors in the tint of its average pixel.
 function pickColors(pixbuf) {
     const channels = pixbuf.get_n_channels();
     const stride = pixbuf.get_rowstride();
     const pixels = pixbuf.get_pixels();
     const buckets = Array.from({length: BUCKETS}, () => ({weight: 0, rgb: [0, 0, 0]}));
+    const total = [0, 0, 0];
+    let count = 0;
 
     for (let y = 0; y < pixbuf.get_height(); y++) {
         for (let x = 0; x < pixbuf.get_width(); x++) {
@@ -52,6 +66,8 @@ function pickColors(pixbuf) {
             if (channels === 4 && pixels[i + 3] < 128)
                 continue;
             const rgb = [pixels[i] / 255, pixels[i + 1] / 255, pixels[i + 2] / 255];
+            rgb.forEach((c, k) => (total[k] += c));
+            count++;
             const [h, s, l] = toHsl(rgb);
             if (s < 0.2 || l < 0.12 || l > 0.9)
                 continue;
@@ -66,8 +82,10 @@ function pickColors(pixbuf) {
         .filter(b => b.weight > 0)
         .sort((a, b) => b.weight - a.weight);
     const first = ranked[0];
-    if (!first || first.weight < SAMPLE * SAMPLE * 0.02)
-        return null;
+    if (!first || first.weight < SAMPLE * SAMPLE * 0.02) {
+        const [h, s] = count ? toHsl(total.map(c => c / count)) : [0, 0];
+        return neutralColors(h, s);
+    }
     const average = b => b.rgb.map(c => c / b.weight);
     const primary = tame(average(first));
 
@@ -96,7 +114,7 @@ export class Artwork {
     }
 
     // Resolves with {path, colors} for the cover at uri, colors being
-    // [primary, secondary] or null, or with null when it can't be read.
+    // [primary, secondary], or with null when it can't be read.
     load(uri) {
         let result = this._results.get(uri);
         if (!result) {

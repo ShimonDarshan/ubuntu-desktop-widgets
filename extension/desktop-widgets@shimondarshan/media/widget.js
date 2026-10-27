@@ -2,7 +2,9 @@
 // timeline you can drag to seek, play controls and a speaker button for the
 // main volume. The card's top is tinted with the cover's color. Drag it
 // anywhere with the left button (the spot is saved); right-click for lock,
-// always on top, visualizer style, settings and hide.
+// always on top, visualizer style, settings and hide. The X that shows on
+// hover hides the card too; the music keeps playing and the music icon in the
+// top bar brings the card back.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -15,11 +17,11 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
-import {Artwork} from './artwork.js';
+import {Artwork, neutralColors} from './artwork.js';
 import {css, mix} from './color.js';
 import {Players} from './mpris.js';
 import {Output} from './volume.js';
-import {STYLES, Visualizer, sourceColor} from './visualizer.js';
+import {STYLES, Visualizer} from './visualizer.js';
 
 const STYLE_LABELS = {halo: 'Halo bars', rainbow: 'Rainbow bars', mirror: 'Mirror', wave: 'Wave'};
 const POSITION_POLL_S = 1;
@@ -38,6 +40,8 @@ const DEFAULT_OPACITY = 72;
 const SHADOW_BELOW = 30;
 // Default distance from the top-right corner of the primary monitor.
 const MARGIN = 40;
+// The X fades in and out this fast when the pointer enters or leaves.
+const CLOSE_FADE_MS = 150;
 
 function iconButton(iconName, label, styleClass = 'dw-media-button') {
     return new St.Button({
@@ -76,7 +80,7 @@ function ellipsized(label) {
 export const MediaWidget = GObject.registerClass(
 class MediaWidget extends St.BoxLayout {
     _init(settings, openPreferences) {
-        super._init({style_class: 'dw-media', vertical: true, reactive: true});
+        super._init({style_class: 'dw-media', vertical: true, reactive: true, track_hover: true});
         this._settings = settings;
         this._active = null;
         this._artKey = null;
@@ -114,6 +118,7 @@ class MediaWidget extends St.BoxLayout {
             'changed::media-background-opacity', () => this._syncSettings(),
             'changed::media-position', () => this.restorePosition(), this);
         this.connect('notify::mapped', () => this._syncVisualizer());
+        this.connect('notify::hover', () => this._syncClose());
         this.connect('destroy', () => this._onDestroy());
 
         this._syncSettings();
@@ -187,8 +192,16 @@ class MediaWidget extends St.BoxLayout {
         this._subtitle = ellipsized(new St.Label({style_class: 'dw-media-subtitle'}));
         for (const label of [this._title, this._subtitle])
             labels.add_child(label);
+        // Kept in the layout while invisible so the title doesn't jump.
+        this._closeButton = iconButton('window-close-symbolic', 'Hide', 'dw-media-button dw-media-close');
+        this._closeButton.y_align = Clutter.ActorAlign.START;
+        this._closeButton.opacity = 0;
+        this._closeButton.connect('clicked', () => this._hide());
+        this._closeButton.connect('key-focus-in', () => this._syncClose());
+        this._closeButton.connect('key-focus-out', () => this._syncClose());
         header.add_child(this._art);
         header.add_child(labels);
+        header.add_child(this._closeButton);
         this.add_child(header);
     }
 
@@ -312,7 +325,20 @@ class MediaWidget extends St.BoxLayout {
 
         this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._menu.addAction('Settings…', () => openPreferences());
-        this._menu.addAction('Hide', () => this._settings.set_boolean('media-visible', false));
+        this._menu.addAction('Hide', () => this._hide());
+    }
+
+    // Only the card goes away: the players don't hear about it.
+    _hide() {
+        this._settings.set_boolean('media-visible', false);
+    }
+
+    _syncClose() {
+        this._closeButton.ease({
+            opacity: this.hover || this._closeButton.has_key_focus() ? 255 : 0,
+            duration: CLOSE_FADE_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
     }
 
     _sync() {
@@ -349,7 +375,6 @@ class MediaWidget extends St.BoxLayout {
             this._seek.add_style_class_name('dw-media-seek-off');
         this._syncDots(players);
         this._syncPositionPoll();
-        this._visualizer.setSource(player?.source ?? null);
         this._syncColors();
         this._syncVisualizer();
     }
@@ -388,12 +413,12 @@ class MediaWidget extends St.BoxLayout {
         this._syncColors();
     }
 
-    // The cover's colors, or the source's while there is none: the card's
-    // tint and the visualizer.
+    // The cover's colors, or white and silver while there is none: the card's
+    // tint and the visualizer. With no player the bars keep the rainbow.
     _syncColors() {
-        const player = this._active;
-        this._visualizer.setColors(this._colors);
-        this._accent = this._colors?.[0] ?? (player ? sourceColor(player.source) : null);
+        const colors = this._colors ?? (this._active ? neutralColors() : null);
+        this._visualizer.setColors(colors);
+        this._accent = colors?.[0] ?? null;
         this._syncBackground();
     }
 

@@ -165,6 +165,18 @@
   color: rgba(244, 241, 234, 0.8);
 }
 
+/* Shows while the pointer is on the card (widget.js fades it). */
+.dw-media-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  color: rgba(244, 241, 234, 0.8);
+}
+
+.dw-media-close StIcon {
+  icon-size: 12px;
+}
+
 .dw-media-dots {
   spacing: 6px;
 }
