@@ -1,6 +1,8 @@
-// Rainbow music visualizer: rounded pill bars on one baseline, colored
-// orange -> yellow -> green -> blue -> purple from left to right and warming
-// toward red at the top of tall bars. Bar heights come from cava, which only
+// Music visualizer: rounded pill bars on one baseline, colored after where the
+// music comes from: reds for YouTube, greens for Spotify, white for the
+// laptop's own players. Each palette shifts a little from left to right and
+// changes shade toward the top of tall bars. Before any player shows up the
+// bars keep the rainbow (orange -> purple). Bar heights come from cava, which only
 // listens to what the speakers play; it never changes the sound. cava runs
 // only while the visualizer is active (music playing, widget shown).
 
@@ -67,6 +69,27 @@ function midColor(x) {
     return hsl((hue + Math.max(0, hue * 0.35 - 5)) / 2, 0.9, 0.52);
 }
 
+// Per source: base, mid and top colors, like the rainbow's, with x the bar's
+// place from 0 (left) to 1 (right).
+const PALETTES = {
+    rainbow: {base: baseColor, mid: midColor, top: topColor},
+    youtube: {
+        base: x => hsl(345 + 15 * x, 0.85, 0.42),
+        mid: x => hsl(352 + 10 * x, 0.9, 0.5),
+        top: x => hsl(2 + 6 * x, 0.95, 0.6),
+    },
+    spotify: {
+        base: x => hsl(150 - 10 * x, 0.75, 0.36),
+        mid: x => hsl(143 - 6 * x, 0.73, 0.44),
+        top: x => hsl(135 - 5 * x, 0.75, 0.6),
+    },
+    local: {
+        base: x => hsl(0, 0, 0.62 + 0.06 * x),
+        mid: x => hsl(0, 0, 0.8 + 0.04 * x),
+        top: () => hsl(0, 0, 1),
+    },
+};
+
 function findCava() {
     return GLib.find_program_in_path('cava') ??
         (GLib.file_test('/usr/local/bin/cava', GLib.FileTest.IS_EXECUTABLE)
@@ -78,6 +101,7 @@ class Visualizer extends St.DrawingArea {
     _init(params) {
         super._init({style_class: 'dw-media-visualizer', x_expand: true, ...params});
         this._style = 'rainbow';
+        this._palette = PALETTES.rainbow;
         this._bars = 28;
         this._values = new Array(this._bars).fill(0);
         this._active = false;
@@ -89,6 +113,15 @@ class Visualizer extends St.DrawingArea {
 
     setStyle(style) {
         this._style = STYLES.includes(style) ? style : 'rainbow';
+        this.queue_repaint();
+    }
+
+    // 'youtube', 'spotify' or 'local' (see Player.source); null keeps the rainbow.
+    setSource(source) {
+        const palette = PALETTES[source] ?? PALETTES.rainbow;
+        if (palette === this._palette)
+            return;
+        this._palette = palette;
         this.queue_repaint();
     }
 
@@ -145,13 +178,14 @@ class Visualizer extends St.DrawingArea {
             const gradient = mirror
                 ? new Cairo.LinearGradient(0, 0, 0, height)
                 : new Cairo.LinearGradient(0, height, 0, 0);
+            const {base, mid, top: topColor} = this._palette;
             if (mirror) {
                 gradient.addColorStopRGB(0, ...topColor(x));
-                gradient.addColorStopRGB(0.5, ...baseColor(x));
+                gradient.addColorStopRGB(0.5, ...base(x));
                 gradient.addColorStopRGB(1, ...topColor(x));
             } else {
-                gradient.addColorStopRGB(0, ...baseColor(x));
-                gradient.addColorStopRGB(0.5, ...midColor(x));
+                gradient.addColorStopRGB(0, ...base(x));
+                gradient.addColorStopRGB(0.5, ...mid(x));
                 gradient.addColorStopRGB(1, ...topColor(x));
             }
 
@@ -174,8 +208,8 @@ class Visualizer extends St.DrawingArea {
         const gradient = new Cairo.LinearGradient(0, 0, width, 0);
         const fill = new Cairo.LinearGradient(0, 0, width, 0);
         for (let s = 0; s <= 6; s++) {
-            gradient.addColorStopRGB(s / 6, ...baseColor(s / 6));
-            fill.addColorStopRGBA(s / 6, ...baseColor(s / 6), 0.25);
+            gradient.addColorStopRGB(s / 6, ...this._palette.base(s / 6));
+            fill.addColorStopRGBA(s / 6, ...this._palette.base(s / 6), 0.25);
         }
 
         const tracePath = () => {

@@ -1,4 +1,4 @@
-// The music card: cover art, title and app, the rainbow visualizer, a
+// The music card: cover art, title and app, the visualizer, a
 // progress line, play controls and the main volume. Drag it anywhere with the
 // left button (the spot is saved); right-click for lock, always on top,
 // visualizer style, settings and hide.
@@ -244,6 +244,7 @@ class MediaWidget extends St.BoxLayout {
         this._progress.visible = (player?.lengthUs ?? 0) > 0;
         this._syncDots(players);
         this._syncPositionPoll();
+        this._visualizer.setSource(player?.source ?? null);
         this._syncVisualizer();
     }
 

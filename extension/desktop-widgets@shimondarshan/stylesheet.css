@@ -1,4 +1,4 @@
-/* The music card: dark glass, 340px wide, Ubuntu orange for the play button.
+/* The music card: dark glass, 340px wide, a white play button.
  * No box-shadow: it drew a wide blur around the card and, while dragging,
  * left stale blurred pixels behind. */
 .dw-media {
@@ -37,8 +37,8 @@
   height: 4px;
   -barlevel-height: 4px;
   -barlevel-background-color: rgba(255, 255, 255, 0.18);
-  -barlevel-active-background-color: #e95420;
-  -barlevel-overdrive-color: #e95420;
+  -barlevel-active-background-color: #ffffff;
+  -barlevel-overdrive-color: #ffffff;
 }
 
 .dw-media-controls {
@@ -69,8 +69,8 @@
   width: 44px;
   height: 44px;
   border-radius: 22px;
-  background-color: #e95420;
-  color: #ffffff;
+  background-color: #ffffff;
+  color: #121212;
 }
 
 .dw-media-play StIcon {
@@ -79,7 +79,7 @@
 
 .dw-media-play:hover,
 .dw-media-play:focus {
-  background-color: #f0703f;
+  background-color: #d9d9d9;
 }
 
 .dw-media-mute {

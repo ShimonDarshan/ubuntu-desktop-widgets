@@ -10,7 +10,8 @@ Web tab in Firefox or Chrome.
 
 - Cover art, title, artist and app; previous / play-pause / next; a progress line
 - Main volume slider and mute (the same output as the top-right system menu)
-- A rainbow visualizer that follows the music, in three styles: rainbow bars,
+- A visualizer that follows the music (red for YouTube, green for Spotify,
+  white for local players), in three styles: rainbow bars,
   mirror and wave. It only listens to the sound and never changes it.
 - With several players, dots under the card switch between them; a player that
   starts playing takes over

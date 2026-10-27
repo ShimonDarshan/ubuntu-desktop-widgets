@@ -1,7 +1,7 @@
 {
   "uuid": "desktop-widgets@shimondarshan",
   "name": "Desktop Widgets",
-  "description": "A music card on the desktop: now playing, controls, volume and a rainbow visualizer driven by cava. Drag it anywhere.",
+  "description": "A music card on the desktop: now playing, controls, volume and a visualizer driven by cava, red for YouTube, green for Spotify and white for local music. Drag it anywhere.",
   "shell-version": ["46"],
   "settings-schema": "org.gnome.shell.extensions.desktop-widgets"
 }
