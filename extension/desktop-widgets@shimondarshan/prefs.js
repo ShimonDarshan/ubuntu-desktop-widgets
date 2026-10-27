@@ -25,6 +25,8 @@ export default class DesktopWidgetsPreferences extends ExtensionPreferences {
         card.add(switchRow(settings, 'media-visible', 'Show music card'));
         card.add(switchRow(settings, 'media-on-top', 'Always on top',
             'When off, the card sits on the desktop and windows cover it'));
+        card.add(switchRow(settings, 'panel-icon-visible', 'Top bar icon',
+            'Click it to bring the card above the windows; click again or click a window to send it back'));
         card.add(switchRow(settings, 'media-locked', 'Lock position'));
         const opacity = Adw.SpinRow.new_with_range(0, 100, 5);
         opacity.title = 'Background opacity';

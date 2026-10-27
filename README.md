@@ -24,6 +24,11 @@ Web tab in Firefox or Chrome.
 By default the card sits on the desktop: above the wallpaper and desktop icons,
 below app windows. "Always on top" keeps it above the windows instead.
 
+When windows cover the card, click the music icon in the top bar: the card
+comes above them (the icon shows pressed) and works as usual. Click the icon
+again, or click any app window, to send it back to the desktop. If the card was
+hidden, the icon shows it. The icon can be turned off in Settings.
+
 ### How the visualizer works
 
 The bar heights come from [cava](https://github.com/karlstav/cava). The
@@ -54,11 +59,12 @@ Settings: right-click the card → Settings…, or the Extensions app.
 
 ```
 extension/desktop-widgets@shimondarshan/
-  extension.js          places the card on the desktop layer or on top
+  extension.js          places the card on the desktop layer, on top or in front for a while
   media/mpris.js        media players on the session bus (MPRIS)
   media/volume.js       main output volume
   media/visualizer.js   runs cava, draws the bars
   media/widget.js       the card, dragging, right-click menu
+  panel/indicator.js    music icon in the top bar that brings the card in front
   prefs.js              settings window
   schemas/              settings schema
   stylesheet.css

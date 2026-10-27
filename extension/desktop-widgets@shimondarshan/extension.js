@@ -1,7 +1,9 @@
 // Desktop Widgets: widgets that live on the desktop. For now, the music card
 // (media/widget.js). The card sits on the desktop layer, above the wallpaper
 // and the desktop icons (DING) but below every app window, or, with "always on
-// top", above the windows like the top panel.
+// top", above the windows like the top panel. The music icon in the top bar
+// (panel/indicator.js) brings the card above the windows for a while: until
+// the icon is clicked again or an app window gets the focus.
 
 import Meta from 'gi://Meta';
 
@@ -10,6 +12,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {hideCavaFromMicIndicator} from './media/micIndicator.js';
 import {MediaWidget} from './media/widget.js';
+import {MediaIndicator} from './panel/indicator.js';
 
 // DING draws the desktop icons in its own full-screen windows. On Wayland it
 // names them "Desktop Icons <n>", or puts "@!x,y;<flags>" in the title with B
@@ -33,15 +36,22 @@ export default class DesktopWidgetsExtension extends Extension {
         this._settings = this.getSettings();
         this._settings.connectObject(
             'changed::media-visible', () => this._syncMedia(),
-            'changed::media-on-top', () => this._place(), this);
+            'changed::media-on-top', () => this._place(),
+            'changed::panel-icon-visible', () => this._syncIndicator(), this);
         Main.layoutManager.connectObject('monitors-changed',
             () => this._media?.restorePosition(), this);
-        global.display.connectObject('restacked', () => this._restack(), this);
+        global.display.connectObject(
+            'restacked', () => this._restack(),
+            'notify::focus-window', () => this._onFocusChanged(), this);
         this._restoreMicIndicator = hideCavaFromMicIndicator();
+        this._peek = false;
         this._syncMedia();
+        this._syncIndicator();
     }
 
     disable() {
+        this._indicator?.destroy();
+        this._indicator = null;
         this._restoreMicIndicator?.();
         this._restoreMicIndicator = null;
         global.display.disconnectObject(this);
@@ -49,6 +59,61 @@ export default class DesktopWidgetsExtension extends Extension {
         this._settings.disconnectObject(this);
         this._destroyMedia();
         this._settings = null;
+    }
+
+    _syncIndicator() {
+        if (!this._settings.get_boolean('panel-icon-visible')) {
+            this._indicator?.destroy();
+            this._indicator = null;
+            if (this._peek)
+                this._endPeek();
+            return;
+        }
+        if (this._indicator)
+            return;
+        this._indicator = new MediaIndicator(() => this._togglePeek());
+        Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'right');
+        this._syncIndicatorState();
+    }
+
+    _syncIndicatorState() {
+        this._indicator?.setActive(!!this._media?.get_parent() && this._onTop);
+    }
+
+    // The icon was clicked: bring the card in front (showing it if it was
+    // hidden), or send it back to the desktop.
+    _togglePeek() {
+        if (this._peek) {
+            const win = this._peekFocus;
+            this._endPeek();
+            if (win && global.display.list_all_windows().includes(win))
+                win.activate(global.get_current_time());
+            return;
+        }
+        if (!this._settings.get_boolean('media-on-top')) {
+            this._peek = true;
+            // With no window focused, a click on any window, even the one
+            // that covered the card, changes the focus and ends the peek.
+            this._peekFocus = global.display.focus_window;
+            global.display.unset_input_focus(global.get_current_time());
+        }
+        if (this._settings.get_boolean('media-visible'))
+            this._place();
+        else
+            this._settings.set_boolean('media-visible', true);
+    }
+
+    _endPeek() {
+        this._peek = false;
+        this._peekFocus = null;
+        this._place();
+    }
+
+    // Clicks on the card stay in the shell and leave the window focus alone,
+    // so a focused window means the user went back to an app.
+    _onFocusChanged() {
+        if (this._peek && global.display.focus_window)
+            this._endPeek();
     }
 
     _syncMedia() {
@@ -64,21 +129,26 @@ export default class DesktopWidgetsExtension extends Extension {
     }
 
     _destroyMedia() {
+        this._peek = false;
+        this._peekFocus = null;
         if (!this._media)
             return;
         this._unparent();
         this._media.destroy();
         this._media = null;
+        this._syncIndicatorState();
     }
 
     _place() {
         const widget = this._media;
         if (!widget)
             return;
-        const onTop = this._settings.get_boolean('media-on-top');
+        const onTop = this._settings.get_boolean('media-on-top') || this._peek;
         if (widget.get_parent()) {
-            if (onTop === this._onTop)
+            if (onTop === this._onTop) {
+                this._syncIndicatorState();
                 return;
+            }
             this._unparent();
         }
         this._onTop = onTop;
@@ -88,6 +158,7 @@ export default class DesktopWidgetsExtension extends Extension {
             global.window_group.add_child(widget);
             this._restack();
         }
+        this._syncIndicatorState();
     }
 
     _unparent() {

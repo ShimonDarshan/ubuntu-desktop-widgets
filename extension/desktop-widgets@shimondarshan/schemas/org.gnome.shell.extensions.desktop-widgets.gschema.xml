@@ -11,6 +11,11 @@
       <summary>Keep the music card above app windows</summary>
       <description>When off, the card sits on the desktop and app windows cover it.</description>
     </key>
+    <key name="panel-icon-visible" type="b">
+      <default>true</default>
+      <summary>Show the music icon in the top bar</summary>
+      <description>Clicking it brings the music card above the app windows until it is clicked again or a window gets the focus.</description>
+    </key>
     <key name="media-locked" type="b">
       <default>false</default>
       <summary>Stop the music card from being dragged</summary>
