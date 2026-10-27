@@ -8,7 +8,7 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-const STYLES = [['rainbow', 'Rainbow bars'], ['mirror', 'Mirror'], ['wave', 'Wave']];
+const STYLES = [['halo', 'Halo bars'], ['rainbow', 'Rainbow bars'], ['mirror', 'Mirror'], ['wave', 'Wave']];
 
 function switchRow(settings, key, title, subtitle = '') {
     const row = new Adw.SwitchRow({title, subtitle});

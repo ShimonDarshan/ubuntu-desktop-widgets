@@ -1,55 +1,116 @@
-/* The music card: dark glass, 340px wide, a white play button.
+/* The music card ("Halo"): dark glass, 340px wide, its top tinted with the
+ * cover's color (widget.js), a light play button.
  * No box-shadow: it drew a wide blur around the card and, while dragging,
  * left stale blurred pixels behind. */
 .dw-media {
   width: 340px;
-  padding: 14px;
-  spacing: 10px;
-  border-radius: 22px;
-  background-color: rgba(18, 18, 18, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #ffffff;
+  padding: 16px;
+  spacing: 12px;
+  border-radius: 24px;
+  background-color: rgba(23, 21, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f4f1ea;
+}
+
+/* A soft shadow keeps the text readable when a light wallpaper shows
+ * through the card. */
+.dw-media StLabel {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
 .dw-media-header {
-  spacing: 12px;
+  spacing: 14px;
 }
 
 .dw-media-art {
-  icon-size: 52px;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  background-color: rgba(244, 241, 234, 0.06);
+}
+
+.dw-media-art-cover {
+  background-color: transparent;
+  background-size: cover;
+}
+
+.dw-media-art-icon {
+  icon-size: 36px;
+}
+
+.dw-media-labels {
+  spacing: 2px;
 }
 
 .dw-media-title {
-  font-weight: bold;
-  font-size: 11pt;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .dw-media-subtitle {
-  font-size: 9pt;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  color: rgba(244, 241, 234, 0.75);
 }
 
 .dw-media-visualizer {
-  height: 48px;
+  height: 36px;
 }
 
-.dw-media-progress {
-  height: 4px;
-  -barlevel-height: 4px;
-  -barlevel-background-color: rgba(255, 255, 255, 0.18);
-  -barlevel-active-background-color: #ffffff;
-  -barlevel-overdrive-color: #ffffff;
+.dw-media-timeline {
+  spacing: 10px;
 }
 
-.dw-media-controls {
-  spacing: 4px;
+.dw-media-seek {
+  height: 16px;
+  -barlevel-height: 3px;
+  -barlevel-background-color: rgba(244, 241, 234, 0.16);
+  -barlevel-active-background-color: #f4f1ea;
+  -barlevel-overdrive-color: #f4f1ea;
+  -slider-handle-radius: 6px;
+  color: #f4f1ea;
+}
+
+/* Bigger handle under the mouse, easier to grab. */
+.dw-media-seek:hover {
+  -slider-handle-radius: 8px;
+}
+
+/* The player can't seek: a plain line. */
+.dw-media-seek-off,
+.dw-media-seek-off:hover {
+  -slider-handle-radius: 0;
+}
+
+.dw-media-seek-tip {
+  padding: 3px 8px;
+  border-radius: 11px;
+  background-color: #f4f1ea;
+  color: #17151a;
+  font-family: "Ubuntu Sans Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dw-media-time {
+  min-width: 34px;
+  font-family: "Ubuntu Sans Mono", monospace;
+  font-size: 11px;
+  color: rgba(244, 241, 234, 0.75);
+}
+
+.dw-media-time-left {
+  text-align: right;
+}
+
+.dw-media-transport {
+  spacing: 16px;
 }
 
 .dw-media-button {
-  width: 36px;
-  height: 36px;
-  border-radius: 18px;
-  color: #ffffff;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  color: #f4f1ea;
 }
 
 .dw-media-button StIcon {
@@ -58,51 +119,49 @@
 
 .dw-media-button:hover,
 .dw-media-button:focus {
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(244, 241, 234, 0.12);
 }
 
 .dw-media-button:insensitive {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(244, 241, 234, 0.35);
+}
+
+.dw-media-skip {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+}
+
+.dw-media-skip StIcon {
+  icon-size: 18px;
 }
 
 .dw-media-play {
-  width: 44px;
-  height: 44px;
-  border-radius: 22px;
-  background-color: #ffffff;
-  color: #121212;
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  background-color: #f4f1ea;
+  color: #17151a;
 }
 
 .dw-media-play StIcon {
-  icon-size: 18px;
+  icon-size: 20px;
 }
 
 .dw-media-play:hover,
 .dw-media-play:focus {
-  background-color: #d9d9d9;
+  background-color: #dcd8d0;
+}
+
+/* Click to mute, scroll to change the volume. The spacer on the other side
+ * keeps previous / play / next centered. */
+.dw-media-mute,
+.dw-media-mute-spacer {
+  width: 32px;
 }
 
 .dw-media-mute {
-  margin-left: 8px;
-}
-
-.dw-media-slider {
-  height: 20px;
-  min-width: 80px;
-  -barlevel-height: 4px;
-  -barlevel-background-color: rgba(255, 255, 255, 0.18);
-  -barlevel-active-background-color: #ffffff;
-  -barlevel-overdrive-color: #ffffff;
-  -slider-handle-radius: 7px;
-  color: #ffffff;
-}
-
-.dw-media-percent {
-  min-width: 38px;
-  text-align: right;
-  font-size: 9pt;
-  font-feature-settings: "tnum";
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(244, 241, 234, 0.8);
 }
 
 .dw-media-dots {
@@ -113,15 +172,15 @@
   width: 8px;
   height: 8px;
   border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.35);
+  background-color: rgba(244, 241, 234, 0.35);
 }
 
 .dw-media-dot:checked {
-  background-color: #ffffff;
+  background-color: #f4f1ea;
 }
 
-/* Background opacity below 30%: shadows keep text and icons readable on the
- * wallpaper, and buttons get a faint dark circle on hover. */
+/* Background opacity below 30%: no tint, shadows keep text and icons
+ * readable on the wallpaper, and buttons get a faint dark circle on hover. */
 .dw-media-transparent StLabel {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }

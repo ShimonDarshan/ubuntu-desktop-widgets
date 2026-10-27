@@ -1,8 +1,9 @@
-// Music visualizer: rounded pill bars on one baseline, colored after where the
-// music comes from: reds for YouTube, greens for Spotify, white for the
-// laptop's own players. Each palette shifts a little from left to right and
-// changes shade toward the top of tall bars. Before any player shows up the
-// bars keep the rainbow (orange -> purple). Bar heights come from cava, which only
+// Music visualizer: thin halo bars (the default), rounded pill bars, mirror
+// or wave. The colors come from the cover (see artwork.js), running from its
+// first color on the left to its second on the right. Without a cover they
+// follow where the music comes from: reds for YouTube, greens for Spotify,
+// white for the laptop's own players. Before any player shows up the bars
+// keep the rainbow (orange -> purple). Bar heights come from cava, which only
 // listens to what the speakers play; it never changes the sound. cava runs
 // only while the visualizer is active (music playing, widget shown).
 
@@ -12,7 +13,9 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
-export const STYLES = ['rainbow', 'mirror', 'wave'];
+import {hsl, mix} from './color.js';
+
+export const STYLES = ['halo', 'rainbow', 'mirror', 'wave'];
 
 const FRAMERATE = 30;
 const RESTART_DELAY_S = 5;
@@ -45,14 +48,6 @@ frame_delimiter = 10
 channels = mono
 mono_option = average
 `;
-}
-
-// HSL (h in degrees, s/l in 0..1) to [r, g, b] in 0..1.
-function hsl(h, s, l) {
-    const k = n => (n + h / 30) % 12;
-    const a = s * Math.min(l, 1 - l);
-    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
-    return [f(0), f(8), f(4)];
 }
 
 // x is the bar's place from 0 (left) to 1 (right).
@@ -90,6 +85,22 @@ const PALETTES = {
     },
 };
 
+// From the cover's two colors: darker at the base, lighter at the top.
+function coverPalette([first, second]) {
+    const at = x => mix(first, second, x);
+    return {
+        base: x => at(x).map(c => c * 0.7),
+        mid: at,
+        top: x => mix(at(x), [1, 1, 1], 0.35),
+    };
+}
+
+// The card's accent for a source ('youtube', 'spotify', 'local'), used while
+// there is no cover; null for an unknown one.
+export function sourceColor(source) {
+    return PALETTES[source] ? PALETTES[source].top(0.5) : null;
+}
+
 function findCava() {
     return GLib.find_program_in_path('cava') ??
         (GLib.file_test('/usr/local/bin/cava', GLib.FileTest.IS_EXECUTABLE)
@@ -100,8 +111,9 @@ export const Visualizer = GObject.registerClass(
 class Visualizer extends St.DrawingArea {
     _init(params) {
         super._init({style_class: 'dw-media-visualizer', x_expand: true, ...params});
-        this._style = 'rainbow';
-        this._palette = PALETTES.rainbow;
+        this._style = 'halo';
+        this._sourcePalette = PALETTES.rainbow;
+        this._coverPalette = null;
         this._bars = 28;
         this._values = new Array(this._bars).fill(0);
         this._active = false;
@@ -112,17 +124,28 @@ class Visualizer extends St.DrawingArea {
     }
 
     setStyle(style) {
-        this._style = STYLES.includes(style) ? style : 'rainbow';
+        this._style = STYLES.includes(style) ? style : 'halo';
         this.queue_repaint();
     }
 
-    // 'youtube', 'spotify' or 'local' (see Player.source); null keeps the rainbow.
+    // 'youtube', 'spotify' or 'local' (see Player.source); null keeps the
+    // rainbow. Used while there are no cover colors.
     setSource(source) {
         const palette = PALETTES[source] ?? PALETTES.rainbow;
-        if (palette === this._palette)
+        if (palette === this._sourcePalette)
             return;
-        this._palette = palette;
+        this._sourcePalette = palette;
         this.queue_repaint();
+    }
+
+    // The cover's [first, second] colors, or null to use the source's.
+    setColors(colors) {
+        this._coverPalette = colors ? coverPalette(colors) : null;
+        this.queue_repaint();
+    }
+
+    get _palette() {
+        return this._coverPalette ?? this._sourcePalette;
     }
 
     setBarCount(bars) {
@@ -157,6 +180,8 @@ class Visualizer extends St.DrawingArea {
         const [width, height] = this.get_surface_size();
         if (this._style === 'wave')
             this._drawWave(cr, width, height);
+        else if (this._style === 'halo')
+            this._drawHalo(cr, width, height);
         else
             this._drawPills(cr, width, height, this._style === 'mirror');
         cr.$dispose();
@@ -194,6 +219,31 @@ class Visualizer extends St.DrawingArea {
             cr.arc(left + radius, top + barHeight - radius, radius, 0, Math.PI);
             cr.closePath();
             cr.setSource(gradient);
+            cr.fill();
+        }
+    }
+
+    // Thin bars, close together, in the light version of the colors so they
+    // stand out on a see-through card too.
+    _drawHalo(cr, width, height) {
+        const n = this._values.length;
+        const slot = width / n;
+        const barWidth = Math.max(2, Math.min(slot - 2, slot * 0.6));
+        const radius = Math.min(2, barWidth / 2);
+        for (let i = 0; i < n; i++) {
+            const x = n > 1 ? i / (n - 1) : 0;
+            const value = this._values[i];
+            const barHeight = Math.max(3, value * height);
+            const left = i * slot + (slot - barWidth) / 2;
+            const top = height - barHeight;
+
+            cr.newSubPath();
+            cr.arc(left + barWidth - radius, top + radius, radius, -Math.PI / 2, 0);
+            cr.lineTo(left + barWidth, height);
+            cr.lineTo(left, height);
+            cr.arc(left + radius, top + radius, radius, Math.PI, 1.5 * Math.PI);
+            cr.closePath();
+            cr.setSourceRGB(...this._palette.top(x));
             cr.fill();
         }
     }

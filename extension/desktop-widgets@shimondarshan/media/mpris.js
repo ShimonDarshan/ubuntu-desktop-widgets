@@ -27,11 +27,19 @@ const PlayerProxy = Gio.DBusProxy.makeProxyWrapper(`
     <method name="PlayPause"/>
     <method name="Next"/>
     <method name="Previous"/>
+    <method name="SetPosition">
+      <arg name="TrackId" type="o" direction="in"/>
+      <arg name="Position" type="x" direction="in"/>
+    </method>
+    <method name="Seek">
+      <arg name="Offset" type="x" direction="in"/>
+    </method>
     <property name="PlaybackStatus" type="s" access="read"/>
     <property name="Metadata" type="a{sv}" access="read"/>
     <property name="CanGoNext" type="b" access="read"/>
     <property name="CanGoPrevious" type="b" access="read"/>
     <property name="CanPlay" type="b" access="read"/>
+    <property name="CanSeek" type="b" access="read"/>
   </interface>
 </node>`);
 
@@ -57,11 +65,13 @@ class Player extends Signals.EventEmitter {
         this.artists = [];
         this.artUrl = '';
         this.url = '';
+        this.trackId = '';
         this.lengthUs = 0;
         this.status = 'Stopped';
         this.canPlay = false;
         this.canGoNext = false;
         this.canGoPrevious = false;
+        this.canSeek = false;
         this.app = null;
         this.identity = '';
 
@@ -116,6 +126,22 @@ class Player extends Signals.EventEmitter {
         this._player.PreviousAsync().catch(e => this._logError(e));
     }
 
+    // Jumps to positionUs (microseconds) in the current track. Players that
+    // send no track id get a relative Seek from where they are now.
+    async setPosition(positionUs) {
+        try {
+            if (this.trackId) {
+                await this._player.SetPositionAsync(this.trackId, Math.round(positionUs));
+                return;
+            }
+            const now = await this.getPosition();
+            if (now >= 0)
+                await this._player.SeekAsync(Math.round(positionUs - now));
+        } catch (e) {
+            this._logError(e);
+        }
+    }
+
     // Resolves with the playback position in microseconds, or -1 when the
     // player doesn't report one. Position never emits PropertiesChanged, so
     // it has to be asked for.
@@ -162,11 +188,13 @@ class Player extends Signals.EventEmitter {
         this.title = typeof metadata['xesam:title'] === 'string' ? metadata['xesam:title'] : '';
         this.artUrl = typeof metadata['mpris:artUrl'] === 'string' ? metadata['mpris:artUrl'] : '';
         this.url = typeof metadata['xesam:url'] === 'string' ? metadata['xesam:url'] : '';
+        this.trackId = typeof metadata['mpris:trackid'] === 'string' ? metadata['mpris:trackid'] : '';
         this.lengthUs = Number(metadata['mpris:length']) || 0;
         this.status = this._player.PlaybackStatus ?? 'Stopped';
         this.canPlay = !!this._player.CanPlay;
         this.canGoNext = !!this._player.CanGoNext;
         this.canGoPrevious = !!this._player.CanGoPrevious;
+        this.canSeek = !!this._player.CanSeek;
         this.emit('changed');
     }
 

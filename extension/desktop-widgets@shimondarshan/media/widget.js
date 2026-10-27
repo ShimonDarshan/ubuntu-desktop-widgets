@@ -1,7 +1,8 @@
-// The music card: cover art, title and app, the visualizer, a
-// progress line, play controls and the main volume. Drag it anywhere with the
-// left button (the spot is saved); right-click for lock, always on top,
-// visualizer style, settings and hide.
+// The music card: cover art, title, artist and app, the visualizer, a
+// timeline you can drag to seek, play controls and a speaker button for the
+// main volume. The card's top is tinted with the cover's color. Drag it
+// anywhere with the left button (the spot is saved); right-click for lock,
+// always on top, visualizer style, settings and hide.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -12,20 +13,27 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import {BarLevel} from 'resource:///org/gnome/shell/ui/barLevel.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
+import {Artwork} from './artwork.js';
+import {css, mix} from './color.js';
 import {Players} from './mpris.js';
 import {Output} from './volume.js';
-import {STYLES, Visualizer} from './visualizer.js';
+import {STYLES, Visualizer, sourceColor} from './visualizer.js';
 
-const STYLE_LABELS = {rainbow: 'Rainbow bars', mirror: 'Mirror', wave: 'Wave'};
+const STYLE_LABELS = {halo: 'Halo bars', rainbow: 'Rainbow bars', mirror: 'Mirror', wave: 'Wave'};
 const POSITION_POLL_S = 1;
+// Scrolling or the arrow keys on the timeline seek once they pause this long.
+const SEEK_DELAY_MS = 300;
+// Scrolling on the speaker button changes the volume by this much.
+const VOLUME_STEP = 0.05;
 // Background color and edge of the card (stylesheet.css); the opacity setting
-// scales both. Below SHADOW_BELOW percent the text gets a shadow to stay
+// scales both. The top of the card mixes in TINT of the accent color. Below
+// SHADOW_BELOW percent there is no tint and the text gets a shadow to stay
 // readable on bright wallpapers.
-const BACKGROUND_RGB = '18, 18, 18';
-const EDGE_ALPHA_AT_DEFAULT = 0.14;
+const BACKGROUND = [23 / 255, 21 / 255, 26 / 255];
+const TINT = 0.2;
+const EDGE_ALPHA_AT_DEFAULT = 0.12;
 const DEFAULT_OPACITY = 72;
 const SHADOW_BELOW = 30;
 // Default distance from the top-right corner of the primary monitor.
@@ -51,6 +59,20 @@ function volumeIcon(level, muted) {
     return 'audio-volume-high-symbolic';
 }
 
+// Microseconds as 3:07, or 1:02:07 past an hour.
+function formatTime(us) {
+    const total = Math.max(0, Math.floor(us / 1e6));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor(total / 60) % 60;
+    const seconds = String(total % 60).padStart(2, '0');
+    return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
+}
+
+function ellipsized(label) {
+    label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+    return label;
+}
+
 export const MediaWidget = GObject.registerClass(
 class MediaWidget extends St.BoxLayout {
     _init(settings, openPreferences) {
@@ -58,12 +80,16 @@ class MediaWidget extends St.BoxLayout {
         this._settings = settings;
         this._active = null;
         this._artKey = null;
+        this._colors = null;
+        this._accent = null;
+        this._positionUs = 0;
+        this._seeking = false;
+        this._artwork = new Artwork();
 
         this._buildHeader();
         this._visualizer = new Visualizer();
         this.add_child(this._visualizer);
-        this._progress = new BarLevel({style_class: 'dw-media-progress', x_expand: true});
-        this.add_child(this._progress);
+        this._buildTimeline();
         this._buildControls();
         this._dots = new St.BoxLayout({style_class: 'dw-media-dots', x_align: Clutter.ActorAlign.CENTER});
         this.add_child(this._dots);
@@ -142,46 +168,118 @@ class MediaWidget extends St.BoxLayout {
 
     _buildHeader() {
         const header = new St.BoxLayout({style_class: 'dw-media-header'});
-        this._art = new St.Icon({style_class: 'dw-media-art', y_align: Clutter.ActorAlign.CENTER});
+        // The cover is the Bin's background image (round corners); without
+        // one the Bin shows the app's icon instead.
+        this._art = new St.Bin({style_class: 'dw-media-art', y_align: Clutter.ActorAlign.CENTER});
+        this._artIcon = new St.Icon({
+            style_class: 'dw-media-art-icon',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._art.set_child(this._artIcon);
         const labels = new St.BoxLayout({
+            style_class: 'dw-media-labels',
             vertical: true,
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._title = new St.Label({style_class: 'dw-media-title'});
-        this._subtitle = new St.Label({style_class: 'dw-media-subtitle'});
-        for (const label of [this._title, this._subtitle]) {
-            label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        this._title = ellipsized(new St.Label({style_class: 'dw-media-title'}));
+        this._subtitle = ellipsized(new St.Label({style_class: 'dw-media-subtitle'}));
+        for (const label of [this._title, this._subtitle])
             labels.add_child(label);
-        }
         header.add_child(this._art);
         header.add_child(labels);
         this.add_child(header);
     }
 
+    // Elapsed time, the track line with a handle to seek, and time left, on
+    // one row. While dragging, a bubble above the handle shows where the song
+    // will jump to; it jumps on release.
+    _buildTimeline() {
+        this._timeline = new St.BoxLayout({style_class: 'dw-media-timeline'});
+        const track = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._seek = new Slider(0);
+        this._seek.add_style_class_name('dw-media-seek');
+        this._seek.set({x_expand: true, track_hover: true});
+        this._seek.accessible_name = 'Position';
+        this._tip = new St.Label({
+            style_class: 'dw-media-seek-tip',
+            visible: false,
+            x_align: Clutter.ActorAlign.START,
+            y_align: Clutter.ActorAlign.START,
+        });
+        track.add_child(this._seek);
+        track.add_child(this._tip);
+
+        this._elapsed = new St.Label({style_class: 'dw-media-time', y_align: Clutter.ActorAlign.CENTER});
+        this._remaining = new St.Label({
+            style_class: 'dw-media-time dw-media-time-left',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._timeline.add_child(this._elapsed);
+        this._timeline.add_child(track);
+        this._timeline.add_child(this._remaining);
+        this.add_child(this._timeline);
+
+        this._seek.connect('drag-begin', () => {
+            this._seeking = true;
+            this._syncTimes();
+        });
+        this._seek.connect('drag-end', () => {
+            this._seeking = false;
+            this._tip.hide();
+            this._seekTo(this._seek.value);
+        });
+        this._seekId = this._seek.connect('notify::value', () => {
+            this._syncTimes();
+            if (!this._seeking)
+                this._queueSeek();
+        });
+    }
+
+    // Previous / play / next in the middle; the speaker button on the right
+    // (click to mute, scroll to change the volume) is balanced by an empty
+    // spot of the same width on the left.
     _buildControls() {
         const row = new St.BoxLayout({style_class: 'dw-media-controls'});
+        const buttons = new St.BoxLayout({
+            style_class: 'dw-media-transport',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.CENTER,
+        });
 
-        this._prevButton = iconButton('media-skip-backward-symbolic', 'Previous');
+        this._prevButton = iconButton('media-skip-backward-symbolic', 'Previous', 'dw-media-button dw-media-skip');
         this._prevButton.connect('clicked', () => this._active?.previous());
         this._playButton = iconButton('media-playback-start-symbolic', 'Play', 'dw-media-play');
         this._playButton.connect('clicked', () => this._active?.playPause());
-        this._nextButton = iconButton('media-skip-forward-symbolic', 'Next');
+        this._nextButton = iconButton('media-skip-forward-symbolic', 'Next', 'dw-media-button dw-media-skip');
         this._nextButton.connect('clicked', () => this._active?.next());
+        for (const child of [this._prevButton, this._playButton, this._nextButton])
+            buttons.add_child(child);
 
         this._muteButton = iconButton('audio-volume-high-symbolic', 'Mute', 'dw-media-button dw-media-mute');
         this._muteButton.connect('clicked', () => this._output.toggleMute());
-        this._slider = new Slider(0);
-        this._slider.add_style_class_name('dw-media-slider');
-        this._slider.set({x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        this._slider.accessible_name = 'Volume';
-        this._sliderId = this._slider.connect('notify::value',
-            () => this._output.setLevel(this._slider.value));
-        this._percent = new St.Label({style_class: 'dw-media-percent', y_align: Clutter.ActorAlign.CENTER});
+        this._muteButton.connect('scroll-event', (_b, event) => {
+            const direction = event.get_scroll_direction();
+            let step = 0;
+            if (direction === Clutter.ScrollDirection.UP)
+                step = VOLUME_STEP;
+            else if (direction === Clutter.ScrollDirection.DOWN)
+                step = -VOLUME_STEP;
+            else if (direction === Clutter.ScrollDirection.SMOOTH)
+                step = -event.get_scroll_delta()[1] * VOLUME_STEP;
+            if (step)
+                this._output.setLevel(Math.max(0, Math.min(1, this._output.level + step)));
+            return Clutter.EVENT_STOP;
+        });
 
-        for (const child of [this._prevButton, this._playButton, this._nextButton,
-            this._muteButton, this._slider, this._percent])
-            row.add_child(child);
+        row.add_child(new St.Widget({style_class: 'dw-media-mute-spacer'}));
+        row.add_child(buttons);
+        row.add_child(this._muteButton);
         this.add_child(row);
     }
 
@@ -241,10 +339,18 @@ class MediaWidget extends St.BoxLayout {
         this._prevButton.reactive = !!player?.canGoPrevious;
         this._nextButton.reactive = !!player?.canGoNext;
 
-        this._progress.visible = (player?.lengthUs ?? 0) > 0;
+        this._timeline.visible = (player?.lengthUs ?? 0) > 0;
+        const canSeek = !!player?.canSeek;
+        this._seek.reactive = canSeek;
+        this._seek.can_focus = canSeek;
+        if (canSeek)
+            this._seek.remove_style_class_name('dw-media-seek-off');
+        else
+            this._seek.add_style_class_name('dw-media-seek-off');
         this._syncDots(players);
         this._syncPositionPoll();
         this._visualizer.setSource(player?.source ?? null);
+        this._syncColors();
         this._syncVisualizer();
     }
 
@@ -253,10 +359,42 @@ class MediaWidget extends St.BoxLayout {
         if (key === this._artKey)
             return;
         this._artKey = key;
-        if (player?.artUrl)
-            this._art.gicon = new Gio.FileIcon({file: Gio.File.new_for_uri(player.artUrl)});
-        else
-            this._art.gicon = player?.app?.get_icon() ?? new Gio.ThemedIcon({name: 'audio-x-generic-symbolic'});
+        if (!player?.artUrl) {
+            this._showIcon(player);
+            return;
+        }
+        // The previous cover stays until the new one is ready.
+        this._artwork.load(player.artUrl).then(result => {
+            if (key !== this._artKey)
+                return;
+            if (result) {
+                this._art.set_style(`background-image: url("${GLib.filename_to_uri(result.path, null)}");`);
+                this._art.add_style_class_name('dw-media-art-cover');
+                this._artIcon.hide();
+                this._colors = result.colors;
+            } else {
+                this._showIcon(this._active);
+            }
+            this._syncColors();
+        });
+    }
+
+    _showIcon(player) {
+        this._art.set_style(null);
+        this._art.remove_style_class_name('dw-media-art-cover');
+        this._artIcon.gicon = player?.app?.get_icon() ?? new Gio.ThemedIcon({name: 'audio-x-generic-symbolic'});
+        this._artIcon.show();
+        this._colors = null;
+        this._syncColors();
+    }
+
+    // The cover's colors, or the source's while there is none: the card's
+    // tint and the visualizer.
+    _syncColors() {
+        const player = this._active;
+        this._visualizer.setColors(this._colors);
+        this._accent = this._colors?.[0] ?? (player ? sourceColor(player.source) : null);
+        this._syncBackground();
     }
 
     // One dot per player when there is more than one; click to show it.
@@ -299,8 +437,54 @@ class MediaWidget extends St.BoxLayout {
         if (!player || player.lengthUs <= 0)
             return;
         const position = await player.getPosition();
-        if (player === this._active && position >= 0)
-            this._progress.value = Math.min(1, position / player.lengthUs);
+        // Leave the handle alone while the user moves it.
+        if (player !== this._active || position < 0 || this._seeking || this._seekDelayId)
+            return;
+        this._positionUs = position;
+        this._seek.block_signal_handler(this._seekId);
+        this._seek.value = Math.min(1, position / player.lengthUs);
+        this._seek.unblock_signal_handler(this._seekId);
+        this._syncTimes();
+    }
+
+    // While seeking the times follow the handle, otherwise the player.
+    _syncTimes() {
+        const length = this._active?.lengthUs ?? 0;
+        const moving = this._seeking || !!this._seekDelayId;
+        const position = moving ? this._seek.value * length : Math.min(this._positionUs, length);
+        this._elapsed.text = formatTime(position);
+        this._remaining.text = `−${formatTime(length - position)}`;
+        if (!this._seeking)
+            return;
+        this._tip.text = formatTime(position);
+        this._tip.show();
+        const radius = this._seek.get_theme_node().get_length('-slider-handle-radius');
+        const handleX = radius + (this._seek.width - 2 * radius) * this._seek.value;
+        const [, tipWidth] = this._tip.get_preferred_width(-1);
+        const [, tipHeight] = this._tip.get_preferred_height(tipWidth);
+        this._tip.translation_x = Math.round(handleX - tipWidth / 2);
+        this._tip.translation_y = -tipHeight - 6;
+    }
+
+    // Scroll and arrow keys change the value in small steps; seek once they stop.
+    _queueSeek() {
+        if (this._seekDelayId)
+            GLib.source_remove(this._seekDelayId);
+        this._seekDelayId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SEEK_DELAY_MS, () => {
+            this._seekDelayId = 0;
+            this._seekTo(this._seek.value);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    async _seekTo(fraction) {
+        const player = this._active;
+        if (!player?.canSeek || player.lengthUs <= 0)
+            return;
+        this._positionUs = fraction * player.lengthUs;
+        this._syncTimes();
+        await player.setPosition(this._positionUs);
+        this._updatePosition();
     }
 
     _syncVisualizer() {
@@ -310,13 +494,9 @@ class MediaWidget extends St.BoxLayout {
     _syncVolume() {
         const {level, muted, available} = this._output;
         this._muteButton.child.icon_name = volumeIcon(level, muted);
-        this._muteButton.accessible_name = muted ? 'Unmute' : 'Mute';
-        this._slider.block_signal_handler(this._sliderId);
-        this._slider.value = muted ? 0 : level;
-        this._slider.unblock_signal_handler(this._sliderId);
-        this._percent.text = muted ? 'Muted' : `${Math.round(level * 100)}%`;
-        for (const actor of [this._muteButton, this._slider, this._percent])
-            actor.visible = available;
+        this._muteButton.accessible_name = muted
+            ? 'Unmute' : `Mute (volume ${Math.round(level * 100)}%)`;
+        this._muteButton.visible = available;
     }
 
     _syncSettings() {
@@ -336,9 +516,14 @@ class MediaWidget extends St.BoxLayout {
             this._lastOpacity = opacity;
         const alpha = opacity / 100;
         const edge = Math.min(1, EDGE_ALPHA_AT_DEFAULT * opacity / DEFAULT_OPACITY);
-        this.set_style(`background-color: rgba(${BACKGROUND_RGB}, ${alpha}); ` +
-            `border-color: rgba(255, 255, 255, ${edge.toFixed(3)});`);
-        if (opacity < SHADOW_BELOW)
+        const transparent = opacity < SHADOW_BELOW;
+        const background = this._accent && !transparent
+            ? 'background-gradient-direction: vertical; ' +
+              `background-gradient-start: ${css(mix(BACKGROUND, this._accent, TINT), alpha)}; ` +
+              `background-gradient-end: ${css(BACKGROUND, alpha)};`
+            : `background-color: ${css(BACKGROUND, alpha)};`;
+        this.set_style(`${background} border-color: rgba(255, 255, 255, ${edge.toFixed(3)});`);
+        if (transparent)
             this.add_style_class_name('dw-media-transparent');
         else
             this.remove_style_class_name('dw-media-transparent');
@@ -372,13 +557,16 @@ class MediaWidget extends St.BoxLayout {
 
     _onDestroy() {
         this._endDrag();
-        if (this._positionId) {
-            GLib.source_remove(this._positionId);
-            this._positionId = 0;
+        for (const id of ['_positionId', '_seekDelayId']) {
+            if (this[id]) {
+                GLib.source_remove(this[id]);
+                this[id] = 0;
+            }
         }
         this._settings.disconnectObject(this);
         this._menu.destroy();
         this._players.destroy();
         this._output.destroy();
+        this._artwork.destroy();
     }
 });

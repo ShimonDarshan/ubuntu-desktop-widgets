@@ -8,11 +8,16 @@ extension: `desktop-widgets@shimondarshan`.
 A card on the desktop for whatever is playing: Spotify, or a YouTube / Spotify
 Web tab in Firefox or Chrome.
 
-- Cover art, title, artist and app; previous / play-pause / next; a progress line
-- Main volume slider and mute (the same output as the top-right system menu)
-- A visualizer that follows the music (red for YouTube, green for Spotify,
-  white for local players), in three styles: rainbow bars,
-  mirror and wave. It only listens to the sound and never changes it.
+- Cover art, title, artist and app; previous / play-pause / next
+- A timeline with elapsed and remaining time; drag it (or scroll on it) to
+  jump in the song. A bubble shows where it will land; it jumps on release.
+- Colors from the cover: the top of the card and the visualizer
+  take the cover's two strongest colors. Without a cover they follow the
+  source (red for YouTube, green for Spotify, white for local players).
+- A speaker button for the main volume (the same output as the top-right
+  system menu): click to mute, scroll on it to change the volume
+- A visualizer that follows the music, in four styles: halo bars, rainbow
+  bars, mirror and wave. It only listens to the sound and never changes it.
 - With several players, dots under the card switch between them; a player that
   starts playing takes over
 - Drag it anywhere with the left button; the spot is kept across logins
@@ -61,7 +66,9 @@ Settings: right-click the card → Settings…, or the Extensions app.
 extension/desktop-widgets@shimondarshan/
   extension.js          places the card on the desktop layer, on top or in front for a while
   media/mpris.js        media players on the session bus (MPRIS)
-  media/volume.js       main output volume
+  media/volume.js       main output volume and its name
+  media/artwork.js      caches covers, picks their colors
+  media/color.js        color helpers
   media/visualizer.js   runs cava, draws the bars
   media/widget.js       the card, dragging, right-click menu
   panel/indicator.js    music icon in the top bar that brings the card in front

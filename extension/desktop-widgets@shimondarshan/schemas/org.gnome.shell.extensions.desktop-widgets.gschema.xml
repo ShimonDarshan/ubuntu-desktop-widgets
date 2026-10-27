@@ -33,11 +33,12 @@
     </key>
     <key name="visualizer-style" type="s">
       <choices>
+        <choice value="halo"/>
         <choice value="rainbow"/>
         <choice value="mirror"/>
         <choice value="wave"/>
       </choices>
-      <default>'rainbow'</default>
+      <default>'halo'</default>
       <summary>Visualizer style</summary>
     </key>
     <key name="visualizer-bars" type="i">
