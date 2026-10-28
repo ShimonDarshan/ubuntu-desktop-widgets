@@ -3,14 +3,18 @@
 // first color on the left to its second on the right; without a cover they
 // are white and silver. Before any player shows up the bars keep the rainbow
 // (orange -> purple). Bar heights come from cava, which only
-// listens to what the speakers play; it never changes the sound. cava runs
-// only while the visualizer is active (music playing, widget shown).
+// listens to what the speakers play; it never changes the sound. One
+// CavaFeed runs one cava for every Visualizer drawing it (the card's, or one
+// strip per monitor at the bottom of the screen), and only while music plays
+// and at least one of them is on screen.
 
 import Cairo from 'cairo';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
+
+import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
 import {hsl, mix} from './color.js';
 
@@ -83,48 +87,75 @@ function findCava() {
             ? '/usr/local/bin/cava' : null);
 }
 
-export const Visualizer = GObject.registerClass(
-class Visualizer extends St.DrawingArea {
-    _init(params) {
-        super._init({style_class: 'dw-media-visualizer', x_expand: true, ...params});
-        this._style = 'halo';
-        this._palette = RAINBOW;
+// Runs cava and emits 'values' with each new frame of bar heights (0..1),
+// read from feed.values. When it stops, the bars sink to a row of dots.
+export class CavaFeed extends Signals.EventEmitter {
+    constructor() {
+        super();
         this._bars = 28;
-        this._values = new Array(this._bars).fill(0);
+        this.values = new Array(this._bars).fill(0);
+        this._views = new Set();
+        this._playing = false;
         this._active = false;
         this._cava = findCava();
         if (!this._cava)
             console.warn('desktop-widgets: cava not found; the visualizer stays still');
-        this.connect('destroy', () => this._onDestroy());
-    }
-
-    setStyle(style) {
-        this._style = STYLES.includes(style) ? style : 'halo';
-        this.queue_repaint();
-    }
-
-    // The [first, second] colors to run from left to right, or null for the
-    // rainbow.
-    setColors(colors) {
-        this._palette = colors ? coverPalette(colors) : RAINBOW;
-        this.queue_repaint();
     }
 
     setBarCount(bars) {
         if (bars === this._bars)
             return;
         this._bars = bars;
-        this._values = new Array(bars).fill(0);
+        this.values = new Array(bars).fill(0);
         if (this._active) {
             this._stop();
             this._spawn();
         }
-        this.queue_repaint();
+        this.emit('values');
     }
 
-    // Active: run cava and follow the music. Inactive: stop cava and let the
-    // bars sink to a row of dots.
-    setActive(active) {
+    setPlaying(playing) {
+        this._playing = playing;
+        this._syncActive();
+    }
+
+    // cava runs only while one of the views is on screen.
+    addView(view) {
+        this._views.add(view);
+        view.connectObject(
+            'notify::mapped', () => this._queueSync(),
+            'destroy', () => {
+                this._views.delete(view);
+                this._queueSync();
+            }, this);
+        this._queueSync();
+    }
+
+    destroy() {
+        for (const view of this._views)
+            view.disconnectObject(this);
+        this._views.clear();
+        if (this._syncId) {
+            GLib.source_remove(this._syncId);
+            this._syncId = 0;
+        }
+        this._active = false;
+        this._stopSinking();
+        this._stop();
+    }
+
+    // Restacking the card unmaps and maps it again at once; check once the
+    // main loop is idle, so that doesn't restart cava.
+    _queueSync() {
+        this._syncId ||= GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._syncActive();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _syncActive() {
+        this._syncId = 0;
+        const active = this._playing && [...this._views].some(v => v.mapped);
         if (active === this._active)
             return;
         this._active = active;
@@ -135,119 +166,6 @@ class Visualizer extends St.DrawingArea {
             this._stop();
             this._startSinking();
         }
-    }
-
-    vfunc_repaint() {
-        const cr = this.get_context();
-        const [width, height] = this.get_surface_size();
-        if (this._style === 'wave')
-            this._drawWave(cr, width, height);
-        else if (this._style === 'halo')
-            this._drawHalo(cr, width, height);
-        else
-            this._drawPills(cr, width, height, this._style === 'mirror');
-        cr.$dispose();
-    }
-
-    _drawPills(cr, width, height, mirror) {
-        const n = this._values.length;
-        const slot = width / n;
-        const barWidth = Math.max(2, slot * 0.6);
-        const radius = barWidth / 2;
-        for (let i = 0; i < n; i++) {
-            const x = n > 1 ? i / (n - 1) : 0;
-            const barHeight = Math.max(barWidth, this._values[i] * height);
-            const left = i * slot + (slot - barWidth) / 2;
-            const top = mirror ? (height - barHeight) / 2 : height - barHeight;
-
-            // The gradient spans the whole height, so a short bar shows only
-            // its base color and a tall one reaches the warm top color.
-            const gradient = mirror
-                ? new Cairo.LinearGradient(0, 0, 0, height)
-                : new Cairo.LinearGradient(0, height, 0, 0);
-            const {base, mid, top: topColor} = this._palette;
-            if (mirror) {
-                gradient.addColorStopRGB(0, ...topColor(x));
-                gradient.addColorStopRGB(0.5, ...base(x));
-                gradient.addColorStopRGB(1, ...topColor(x));
-            } else {
-                gradient.addColorStopRGB(0, ...base(x));
-                gradient.addColorStopRGB(0.5, ...mid(x));
-                gradient.addColorStopRGB(1, ...topColor(x));
-            }
-
-            cr.newSubPath();
-            cr.arc(left + radius, top + radius, radius, Math.PI, 0);
-            cr.arc(left + radius, top + barHeight - radius, radius, 0, Math.PI);
-            cr.closePath();
-            cr.setSource(gradient);
-            cr.fill();
-        }
-    }
-
-    // Thin bars, close together, in the light version of the colors so they
-    // stand out on a see-through card too.
-    _drawHalo(cr, width, height) {
-        const n = this._values.length;
-        const slot = width / n;
-        const barWidth = Math.max(2, Math.min(slot - 2, slot * 0.6));
-        const radius = Math.min(2, barWidth / 2);
-        for (let i = 0; i < n; i++) {
-            const x = n > 1 ? i / (n - 1) : 0;
-            const value = this._values[i];
-            const barHeight = Math.max(3, value * height);
-            const left = i * slot + (slot - barWidth) / 2;
-            const top = height - barHeight;
-
-            cr.newSubPath();
-            cr.arc(left + barWidth - radius, top + radius, radius, -Math.PI / 2, 0);
-            cr.lineTo(left + barWidth, height);
-            cr.lineTo(left, height);
-            cr.arc(left + radius, top + radius, radius, Math.PI, 1.5 * Math.PI);
-            cr.closePath();
-            cr.setSourceRGB(...this._palette.top(x));
-            cr.fill();
-        }
-    }
-
-    _drawWave(cr, width, height) {
-        const n = this._values.length;
-        const lineWidth = 3;
-        const span = height - 2 * lineWidth;
-        const points = this._values.map((v, i) =>
-            [(i + 0.5) * width / n, height - lineWidth - v * span]);
-
-        const gradient = new Cairo.LinearGradient(0, 0, width, 0);
-        const fill = new Cairo.LinearGradient(0, 0, width, 0);
-        for (let s = 0; s <= 6; s++) {
-            gradient.addColorStopRGB(s / 6, ...this._palette.base(s / 6));
-            fill.addColorStopRGBA(s / 6, ...this._palette.base(s / 6), 0.25);
-        }
-
-        const tracePath = () => {
-            cr.moveTo(0, points[0][1]);
-            for (let i = 0; i < n - 1; i++) {
-                const [x, y] = points[i];
-                const [nx, ny] = points[i + 1];
-                cr.curveTo(x, y, x, y, (x + nx) / 2, (y + ny) / 2);
-            }
-            cr.lineTo(width, points[n - 1][1]);
-        };
-
-        // Soft fill under the line, then the line itself.
-        tracePath();
-        cr.lineTo(width, height);
-        cr.lineTo(0, height);
-        cr.closePath();
-        cr.setSource(fill);
-        cr.fill();
-
-        tracePath();
-        cr.setSource(gradient);
-        cr.setLineWidth(lineWidth);
-        cr.setLineCap(Cairo.LineCap.ROUND);
-        cr.setLineJoin(Cairo.LineJoin.ROUND);
-        cr.stroke();
     }
 
     _spawn() {
@@ -296,8 +214,8 @@ class Visualizer extends St.DrawingArea {
             }
             const values = line.split(';').filter(v => v !== '').map(v => Number(v) / ASCII_MAX);
             if (values.length === this._bars) {
-                this._values = values;
-                this.queue_repaint();
+                this.values = values;
+                this.emit('values');
             }
             this._readLine(stream, cancellable);
         });
@@ -327,9 +245,9 @@ class Visualizer extends St.DrawingArea {
         if (this._sinkId)
             return;
         this._sinkId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SINK_MS, () => {
-            this._values = this._values.map(v => v * SINK_FACTOR);
-            this.queue_repaint();
-            if (this._values.every(v => v < 0.01)) {
+            this.values = this.values.map(v => v * SINK_FACTOR);
+            this.emit('values');
+            if (this.values.every(v => v < 0.01)) {
                 this._sinkId = 0;
                 return GLib.SOURCE_REMOVE;
             }
@@ -343,10 +261,142 @@ class Visualizer extends St.DrawingArea {
             this._sinkId = 0;
         }
     }
+}
 
-    _onDestroy() {
-        this._active = false;
-        this._stopSinking();
-        this._stop();
+// Draws the bars of a CavaFeed.
+export const Visualizer = GObject.registerClass(
+class Visualizer extends St.DrawingArea {
+    _init(feed, params) {
+        super._init({style_class: 'dw-media-visualizer', x_expand: true, ...params});
+        this._feed = feed;
+        this._style = 'halo';
+        this._palette = RAINBOW;
+        feed.connectObject('values', () => this.queue_repaint(), this);
+        feed.addView(this);
+    }
+
+    setStyle(style) {
+        this._style = STYLES.includes(style) ? style : 'halo';
+        this.queue_repaint();
+    }
+
+    // The [first, second] colors to run from left to right, or null for the
+    // rainbow.
+    setColors(colors) {
+        this._palette = colors ? coverPalette(colors) : RAINBOW;
+        this.queue_repaint();
+    }
+
+    vfunc_repaint() {
+        const cr = this.get_context();
+        const [width, height] = this.get_surface_size();
+        if (this._style === 'wave')
+            this._drawWave(cr, width, height);
+        else if (this._style === 'halo')
+            this._drawHalo(cr, width, height);
+        else
+            this._drawPills(cr, width, height, this._style === 'mirror');
+        cr.$dispose();
+    }
+
+    _drawPills(cr, width, height, mirror) {
+        const n = this._feed.values.length;
+        const slot = width / n;
+        const barWidth = Math.max(2, slot * 0.6);
+        const radius = barWidth / 2;
+        for (let i = 0; i < n; i++) {
+            const x = n > 1 ? i / (n - 1) : 0;
+            const barHeight = Math.max(barWidth, this._feed.values[i] * height);
+            const left = i * slot + (slot - barWidth) / 2;
+            const top = mirror ? (height - barHeight) / 2 : height - barHeight;
+
+            // The gradient spans the whole height, so a short bar shows only
+            // its base color and a tall one reaches the warm top color.
+            const gradient = mirror
+                ? new Cairo.LinearGradient(0, 0, 0, height)
+                : new Cairo.LinearGradient(0, height, 0, 0);
+            const {base, mid, top: topColor} = this._palette;
+            if (mirror) {
+                gradient.addColorStopRGB(0, ...topColor(x));
+                gradient.addColorStopRGB(0.5, ...base(x));
+                gradient.addColorStopRGB(1, ...topColor(x));
+            } else {
+                gradient.addColorStopRGB(0, ...base(x));
+                gradient.addColorStopRGB(0.5, ...mid(x));
+                gradient.addColorStopRGB(1, ...topColor(x));
+            }
+
+            cr.newSubPath();
+            cr.arc(left + radius, top + radius, radius, Math.PI, 0);
+            cr.arc(left + radius, top + barHeight - radius, radius, 0, Math.PI);
+            cr.closePath();
+            cr.setSource(gradient);
+            cr.fill();
+        }
+    }
+
+    // Thin bars, close together, in the light version of the colors so they
+    // stand out on a see-through card too.
+    _drawHalo(cr, width, height) {
+        const n = this._feed.values.length;
+        const slot = width / n;
+        const barWidth = Math.max(2, Math.min(slot - 2, slot * 0.6));
+        const radius = Math.min(2, barWidth / 2);
+        for (let i = 0; i < n; i++) {
+            const x = n > 1 ? i / (n - 1) : 0;
+            const value = this._feed.values[i];
+            const barHeight = Math.max(3, value * height);
+            const left = i * slot + (slot - barWidth) / 2;
+            const top = height - barHeight;
+
+            cr.newSubPath();
+            cr.arc(left + barWidth - radius, top + radius, radius, -Math.PI / 2, 0);
+            cr.lineTo(left + barWidth, height);
+            cr.lineTo(left, height);
+            cr.arc(left + radius, top + radius, radius, Math.PI, 1.5 * Math.PI);
+            cr.closePath();
+            cr.setSourceRGB(...this._palette.top(x));
+            cr.fill();
+        }
+    }
+
+    _drawWave(cr, width, height) {
+        const n = this._feed.values.length;
+        const lineWidth = 3;
+        const span = height - 2 * lineWidth;
+        const points = this._feed.values.map((v, i) =>
+            [(i + 0.5) * width / n, height - lineWidth - v * span]);
+
+        const gradient = new Cairo.LinearGradient(0, 0, width, 0);
+        const fill = new Cairo.LinearGradient(0, 0, width, 0);
+        for (let s = 0; s <= 6; s++) {
+            gradient.addColorStopRGB(s / 6, ...this._palette.base(s / 6));
+            fill.addColorStopRGBA(s / 6, ...this._palette.base(s / 6), 0.25);
+        }
+
+        const tracePath = () => {
+            cr.moveTo(0, points[0][1]);
+            for (let i = 0; i < n - 1; i++) {
+                const [x, y] = points[i];
+                const [nx, ny] = points[i + 1];
+                cr.curveTo(x, y, x, y, (x + nx) / 2, (y + ny) / 2);
+            }
+            cr.lineTo(width, points[n - 1][1]);
+        };
+
+        // Soft fill under the line, then the line itself.
+        tracePath();
+        cr.lineTo(width, height);
+        cr.lineTo(0, height);
+        cr.closePath();
+        cr.setSource(fill);
+        cr.fill();
+
+        tracePath();
+        cr.setSource(gradient);
+        cr.setLineWidth(lineWidth);
+        cr.setLineCap(Cairo.LineCap.ROUND);
+        cr.setLineJoin(Cairo.LineJoin.ROUND);
+        cr.stroke();
     }
 });

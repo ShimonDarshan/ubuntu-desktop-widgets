@@ -3,9 +3,10 @@
 // main volume. The card's top is tinted with the cover's color. Drag it
 // anywhere with the left button (the spot is saved for the monitor it's on
 // and the set of plugged-in monitors); right-click for lock,
-// always on top, visualizer style, settings and hide. The X that shows on
-// hover hides the card too; the music keeps playing and the music icon in the
-// top bar brings the card back.
+// always on top, visualizer style and placement, settings and hide. The X
+// that shows on hover hides the card too; the music keeps playing and the
+// music icon in the top bar brings the card back. With the visualizer at the
+// bottom of the screen (screenVisualizer.js) or hidden, the card has no bars.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -18,14 +19,13 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
-import {Artwork, neutralColors} from './artwork.js';
 import {css, mix} from './color.js';
 import {describeMonitors} from './monitors.js';
-import {Players} from './mpris.js';
 import {Output} from './volume.js';
 import {STYLES, Visualizer} from './visualizer.js';
 
 const STYLE_LABELS = {halo: 'Halo bars', rainbow: 'Rainbow bars', mirror: 'Mirror', wave: 'Wave'};
+const PLACEMENT_LABELS = {card: 'On the card', bottom: 'Bottom of the screen', hidden: 'Hidden'};
 const POSITION_POLL_S = 1;
 // Scrolling or the arrow keys on the timeline seek once they pause this long.
 const SEEK_DELAY_MS = 300;
@@ -81,22 +81,19 @@ function ellipsized(label) {
 
 export const MediaWidget = GObject.registerClass(
 class MediaWidget extends St.BoxLayout {
-    _init(settings, openPreferences) {
+    _init(settings, nowPlaying, feed, openPreferences) {
         super._init({style_class: 'dw-media', vertical: true, reactive: true, track_hover: true});
         this._settings = settings;
-        this._active = null;
-        this._artKey = null;
-        this._colors = null;
+        this._nowPlaying = nowPlaying;
         this._accent = null;
         this._positionUs = 0;
         this._seeking = false;
-        this._artwork = new Artwork();
         this._cancellable = new Gio.Cancellable();
         this._monitors = null;
         this._restoreSerial = 0;
 
         this._buildHeader();
-        this._visualizer = new Visualizer();
+        this._visualizer = new Visualizer(feed);
         this.add_child(this._visualizer);
         this._buildTimeline();
         this._buildControls();
@@ -104,25 +101,19 @@ class MediaWidget extends St.BoxLayout {
         this.add_child(this._dots);
         this._buildMenu(openPreferences);
 
-        this._players = new Players();
-        this._players.connect('changed', (_o, player) => {
-            // A player that starts playing takes over, unless the one shown
-            // is playing too.
-            if (player?.playing && !this._active?.playing)
-                this._active = player;
-            this._sync();
-        });
+        this._nowPlaying.connectObject(
+            'changed', () => this._sync(),
+            'art-changed', () => this._syncArt(), this);
         this._output = new Output();
         this._output.connect('changed', () => this._syncVolume());
 
         this._settings.connectObject(
             'changed::visualizer-style', () => this._syncSettings(),
-            'changed::visualizer-bars', () => this._syncSettings(),
+            'changed::visualizer-placement', () => this._syncSettings(),
             'changed::media-locked', () => this._syncSettings(),
             'changed::media-on-top', () => this._syncSettings(),
             'changed::media-background-opacity', () => this._syncSettings(),
             'changed::media-positions', () => this.restorePosition(), this);
-        this.connect('notify::mapped', () => this._syncVisualizer());
         this.connect('notify::hover', () => this._syncClose());
         this.connect('destroy', () => this._onDestroy());
         // Hidden until restorePosition() knows where it goes.
@@ -130,7 +121,12 @@ class MediaWidget extends St.BoxLayout {
 
         this._syncSettings();
         this._sync();
+        this._syncArt();
         this._syncVolume();
+    }
+
+    get _active() {
+        return this._nowPlaying.active;
     }
 
     // Puts the card on the monitor and at the spot saved for the plugged-in
@@ -366,6 +362,13 @@ class MediaWidget extends St.BoxLayout {
                 () => this._settings.set_string('visualizer-style', style));
             this._styleItems.set(style, item);
         }
+        this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Show visualizer'));
+        this._placementItems = new Map();
+        for (const [placement, label] of Object.entries(PLACEMENT_LABELS)) {
+            const item = this._menu.addAction(label,
+                () => this._settings.set_string('visualizer-placement', placement));
+            this._placementItems.set(placement, item);
+        }
 
         this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._menu.addAction('Settings…', () => openPreferences());
@@ -386,9 +389,7 @@ class MediaWidget extends St.BoxLayout {
     }
 
     _sync() {
-        const players = this._players.list;
-        if (!players.includes(this._active))
-            this._active = players.find(p => p.playing) ?? players[0] ?? null;
+        const players = this._nowPlaying.players;
         const player = this._active;
 
         if (player) {
@@ -399,7 +400,6 @@ class MediaWidget extends St.BoxLayout {
             this._title.text = 'Nothing playing';
             this._subtitle.text = 'Play music in Spotify or a browser';
         }
-        this._syncArt(player);
 
         const playing = !!player?.playing;
         this._playButton.child.icon_name = playing
@@ -419,48 +419,29 @@ class MediaWidget extends St.BoxLayout {
             this._seek.add_style_class_name('dw-media-seek-off');
         this._syncDots(players);
         this._syncPositionPoll();
-        this._syncColors();
-        this._syncVisualizer();
     }
 
-    _syncArt(player) {
-        const key = player ? player.artUrl || `app:${player.busName}` : null;
-        if (key === this._artKey)
-            return;
-        this._artKey = key;
-        if (!player?.artUrl) {
-            this._showIcon(player);
-            return;
+    // The cover, or the app's icon without one.
+    _syncArt() {
+        const cover = this._nowPlaying.cover;
+        if (cover) {
+            this._art.set_style(`background-image: url("${GLib.filename_to_uri(cover.path, null)}");`);
+            this._art.add_style_class_name('dw-media-art-cover');
+            this._artIcon.hide();
+        } else {
+            this._art.set_style(null);
+            this._art.remove_style_class_name('dw-media-art-cover');
+            this._artIcon.gicon = this._active?.app?.get_icon() ??
+                new Gio.ThemedIcon({name: 'audio-x-generic-symbolic'});
+            this._artIcon.show();
         }
-        // The previous cover stays until the new one is ready.
-        this._artwork.load(player.artUrl).then(result => {
-            if (key !== this._artKey)
-                return;
-            if (result) {
-                this._art.set_style(`background-image: url("${GLib.filename_to_uri(result.path, null)}");`);
-                this._art.add_style_class_name('dw-media-art-cover');
-                this._artIcon.hide();
-                this._colors = result.colors;
-            } else {
-                this._showIcon(this._active);
-            }
-            this._syncColors();
-        });
-    }
-
-    _showIcon(player) {
-        this._art.set_style(null);
-        this._art.remove_style_class_name('dw-media-art-cover');
-        this._artIcon.gicon = player?.app?.get_icon() ?? new Gio.ThemedIcon({name: 'audio-x-generic-symbolic'});
-        this._artIcon.show();
-        this._colors = null;
         this._syncColors();
     }
 
     // The cover's colors, or white and silver while there is none: the card's
     // tint and the visualizer. With no player the bars keep the rainbow.
     _syncColors() {
-        const colors = this._colors ?? (this._active ? neutralColors() : null);
+        const colors = this._nowPlaying.colors;
         this._visualizer.setColors(colors);
         this._accent = colors?.[0] ?? null;
         this._syncBackground();
@@ -479,10 +460,7 @@ class MediaWidget extends St.BoxLayout {
                 accessible_name: `Show ${player.appName}`,
                 checked: player === this._active,
             });
-            dot.connect('clicked', () => {
-                this._active = player;
-                this._sync();
-            });
+            dot.connect('clicked', () => this._nowPlaying.select(player));
             this._dots.add_child(dot);
         }
     }
@@ -556,10 +534,6 @@ class MediaWidget extends St.BoxLayout {
         this._updatePosition();
     }
 
-    _syncVisualizer() {
-        this._visualizer.setActive(this.mapped && this._players.list.some(p => p.playing));
-    }
-
     _syncVolume() {
         const {level, muted, available} = this._output;
         this._muteButton.child.icon_name = volumeIcon(level, muted);
@@ -571,9 +545,12 @@ class MediaWidget extends St.BoxLayout {
     _syncSettings() {
         const style = this._settings.get_string('visualizer-style');
         this._visualizer.setStyle(style);
-        this._visualizer.setBarCount(this._settings.get_int('visualizer-bars'));
         for (const [key, item] of this._styleItems)
             item.setOrnament(key === style ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+        const placement = this._settings.get_string('visualizer-placement');
+        this._visualizer.visible = placement === 'card';
+        for (const [key, item] of this._placementItems)
+            item.setOrnament(key === placement ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
         this._lockItem.setToggleState(this._settings.get_boolean('media-locked'));
         this._onTopItem.setToggleState(this._settings.get_boolean('media-on-top'));
         this._syncBackground();
@@ -639,9 +616,8 @@ class MediaWidget extends St.BoxLayout {
             }
         }
         this._settings.disconnectObject(this);
+        this._nowPlaying.disconnectObject(this);
         this._menu.destroy();
-        this._players.destroy();
         this._output.destroy();
-        this._artwork.destroy();
     }
 });

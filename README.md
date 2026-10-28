@@ -19,11 +19,17 @@ Web tab in Firefox or Chrome.
   system menu): click to mute, scroll on it to change the volume
 - A visualizer that follows the music, in four styles: halo bars, rainbow
   bars, mirror and wave. It only listens to the sound and never changes it.
+- The visualizer can sit on the card, along the bottom of the screen, or be
+  hidden (right-click → Show visualizer, or Settings). At the bottom of the
+  screen it spans every monitor above all windows (and the dock), with no
+  background; clicks and scrolling go through it to whatever is underneath.
+  It steps aside for fullscreen windows, fades out when the music stops, and
+  stays even when the card is hidden.
 - With several players, dots under the card switch between them; a player that
   starts playing takes over
 - Drag it anywhere with the left button; the spot is kept across logins
 - Right-click: lock position, always on top, transparent background,
-  visualizer style, settings, hide
+  visualizer style and placement, settings, hide
 - An X in the top-right corner (shown while the pointer is on the card) hides
   the card; the music keeps playing
 - Background opacity from 0% (only the art, text, bars and buttons on the
@@ -42,8 +48,9 @@ it is hidden again. The icon can be turned off in Settings.
 
 The bar heights come from [cava](https://github.com/karlstav/cava). The
 extension starts it with its own config (`~/.cache/desktop-widgets/cava.conf`:
-PipeWire input, raw output, mono) only while something is playing and the card
-is shown, and stops it on pause. Without cava the card still works, with still
+PipeWire input, raw output, mono) only while something is playing and the bars
+are on screen (on the shown card, or at the bottom of the screen), and stops it
+on pause. One cava feeds the card and every monitor's strip. Without cava the card still works, with still
 bars.
 
 cava is started with `PIPEWIRE_LATENCY=1024/48000` so it never lowers the audio
@@ -68,12 +75,15 @@ Settings: right-click the card → Settings…, or the Extensions app.
 
 ```
 extension/desktop-widgets@shimondarshan/
-  extension.js          places the card on the desktop layer, on top or in front for a while
+  extension.js          places the card on the desktop layer, on top or in front for a while;
+                        places the visualizer
   media/mpris.js        media players on the session bus (MPRIS)
   media/volume.js       main output volume and its name
   media/artwork.js      caches covers, picks their colors
+  media/nowPlaying.js   the player shown, its cover and colors (card and strips)
   media/color.js        color helpers
   media/visualizer.js   runs cava, draws the bars
+  media/screenVisualizer.js  the bars along the bottom of every monitor
   media/widget.js       the card, dragging, right-click menu
   panel/indicator.js    music icon in the top bar that brings the card in front
   prefs.js              settings window

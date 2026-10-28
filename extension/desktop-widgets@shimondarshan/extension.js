@@ -3,7 +3,9 @@
 // and the desktop icons (DING) but below every app window, or, with "always on
 // top", above the windows like the top panel. The music icon in the top bar
 // (panel/indicator.js) brings the card above the windows for a while: until
-// the icon is clicked again or an app window gets the focus. It also puts
+// the icon is clicked again or an app window gets the focus. The visualizer
+// can leave the card for the bottom of every monitor, above all windows
+// (media/screenVisualizer.js), or be hidden. It also puts
 // Bluetooth headphones back in music mode when the login screen left them in
 // call mode (media/bluetoothAudio.js).
 
@@ -15,6 +17,9 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {BluetoothAudioFixer} from './media/bluetoothAudio.js';
 import {hideCavaFromMicIndicator} from './media/micIndicator.js';
+import {NowPlaying} from './media/nowPlaying.js';
+import {ScreenVisualizer} from './media/screenVisualizer.js';
+import {CavaFeed} from './media/visualizer.js';
 import {MediaWidget} from './media/widget.js';
 import {MediaIndicator} from './panel/indicator.js';
 
@@ -42,8 +47,20 @@ function isDesktopWindow(actor) {
 export default class DesktopWidgetsExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
+        // Shared by the card and the screen visualizer: one set of players
+        // and covers, one cava.
+        this._nowPlaying = new NowPlaying();
+        this._feed = new CavaFeed();
+        this._nowPlaying.connectObject(
+            'changed', () => this._syncPlaying(),
+            'art-changed', () => this._screenVisualizer?.setColors(this._nowPlaying.colors), this);
         this._settings.connectObject(
             'changed::media-visible', () => this._syncMedia(),
+            'changed::visualizer-placement', () => this._syncVisualizer(),
+            'changed::visualizer-bars', () => this._syncVisualizer(),
+            'changed::visualizer-bottom-bars', () => this._syncVisualizer(),
+            'changed::visualizer-style', () => this._screenVisualizer?.setStyle(
+                this._settings.get_string('visualizer-style')),
             'changed::media-on-top', () => this._place(),
             'changed::panel-icon-visible', () => this._syncIndicator(),
             'changed::bluetooth-audio-fix', () => this._syncBluetoothAudio(), this);
@@ -55,6 +72,8 @@ export default class DesktopWidgetsExtension extends Extension {
         this._restoreMicIndicator = hideCavaFromMicIndicator();
         this._peek = false;
         this._syncMedia();
+        this._syncVisualizer();
+        this._syncPlaying();
         this._syncIndicator();
         this._syncBluetoothAudio();
     }
@@ -74,7 +93,39 @@ export default class DesktopWidgetsExtension extends Extension {
             this._monitorsId = 0;
         }
         this._destroyMedia();
+        this._screenVisualizer?.destroy();
+        this._screenVisualizer = null;
+        this._nowPlaying.disconnectObject(this);
+        this._feed.destroy();
+        this._feed = null;
+        this._nowPlaying.destroy();
+        this._nowPlaying = null;
         this._settings = null;
+    }
+
+    // The bars on the card, at the bottom of every monitor, or nowhere. The
+    // card hides its own bars (widget.js); cava follows whichever are shown.
+    _syncVisualizer() {
+        const placement = this._settings.get_string('visualizer-placement');
+        this._feed.setBarCount(this._settings.get_int(
+            placement === 'bottom' ? 'visualizer-bottom-bars' : 'visualizer-bars'));
+        if (placement !== 'bottom') {
+            this._screenVisualizer?.destroy();
+            this._screenVisualizer = null;
+            return;
+        }
+        if (this._screenVisualizer)
+            return;
+        this._screenVisualizer = new ScreenVisualizer(this._feed);
+        this._screenVisualizer.setStyle(this._settings.get_string('visualizer-style'));
+        this._screenVisualizer.setColors(this._nowPlaying.colors);
+        this._screenVisualizer.setPlaying(this._nowPlaying.playing);
+    }
+
+    _syncPlaying() {
+        const playing = this._nowPlaying.playing;
+        this._feed.setPlaying(playing);
+        this._screenVisualizer?.setPlaying(playing);
     }
 
     _onMonitorsChanged() {
@@ -83,6 +134,7 @@ export default class DesktopWidgetsExtension extends Extension {
         this._monitorsId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, MONITORS_SETTLE_MS, () => {
             this._monitorsId = 0;
             this._media?.restorePosition();
+            this._screenVisualizer?.rebuild();
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -158,7 +210,8 @@ export default class DesktopWidgetsExtension extends Extension {
         }
         if (this._media)
             return;
-        this._media = new MediaWidget(this._settings, () => this.openPreferences());
+        this._media = new MediaWidget(this._settings, this._nowPlaying, this._feed,
+            () => this.openPreferences());
         this._place();
         this._media.restorePosition();
     }

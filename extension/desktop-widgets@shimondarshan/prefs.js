@@ -9,6 +9,24 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const STYLES = [['halo', 'Halo bars'], ['rainbow', 'Rainbow bars'], ['mirror', 'Mirror'], ['wave', 'Wave']];
+const PLACEMENTS = [['card', 'On the card'], ['bottom', 'Bottom of the screen'], ['hidden', 'Hidden']];
+
+// A drop-down for a string key with the given [value, label] choices.
+function comboRow(settings, key, title, choices, subtitle = '') {
+    const row = new Adw.ComboRow({
+        title,
+        subtitle,
+        model: Gtk.StringList.new(choices.map(([, label]) => label)),
+    });
+    const sync = () => {
+        const index = choices.findIndex(([value]) => value === settings.get_string(key));
+        row.selected = Math.max(0, index);
+    };
+    sync();
+    settings.connect(`changed::${key}`, sync);
+    row.connect('notify::selected', () => settings.set_string(key, choices[row.selected][0]));
+    return row;
+}
 
 function switchRow(settings, key, title, subtitle = '') {
     const row = new Adw.SwitchRow({title, subtitle});
@@ -47,24 +65,19 @@ export default class DesktopWidgetsPreferences extends ExtensionPreferences {
         page.add(card);
 
         const visualizer = new Adw.PreferencesGroup({title: 'Visualizer'});
-        const style = new Adw.ComboRow({
-            title: 'Style',
-            model: Gtk.StringList.new(STYLES.map(([, label]) => label)),
-        });
-        const syncStyle = () => {
-            const index = STYLES.findIndex(([key]) => key === settings.get_string('visualizer-style'));
-            style.selected = Math.max(0, index);
-        };
-        syncStyle();
-        settings.connect('changed::visualizer-style', syncStyle);
-        style.connect('notify::selected',
-            () => settings.set_string('visualizer-style', STYLES[style.selected][0]));
-        visualizer.add(style);
+        visualizer.add(comboRow(settings, 'visualizer-placement', 'Show', PLACEMENTS,
+            'Bottom of the screen: above all windows on every monitor, see-through, clicks go through it'));
+        visualizer.add(comboRow(settings, 'visualizer-style', 'Style', STYLES));
 
         const bars = Adw.SpinRow.new_with_range(12, 64, 1);
-        bars.title = 'Bars';
+        bars.title = 'Bars on the card';
         settings.bind('visualizer-bars', bars, 'value', Gio.SettingsBindFlags.DEFAULT);
         visualizer.add(bars);
+
+        const bottomBars = Adw.SpinRow.new_with_range(32, 256, 4);
+        bottomBars.title = 'Bars at the bottom of the screen';
+        settings.bind('visualizer-bottom-bars', bottomBars, 'value', Gio.SettingsBindFlags.DEFAULT);
+        visualizer.add(bottomBars);
 
         const cava = GLib.find_program_in_path('cava') ??
             (GLib.file_test('/usr/local/bin/cava', GLib.FileTest.IS_EXECUTABLE) ? '/usr/local/bin/cava' : null);

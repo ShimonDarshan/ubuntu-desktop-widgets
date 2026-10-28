@@ -50,6 +50,22 @@
       <range min="12" max="64"/>
       <default>28</default>
       <summary>Number of visualizer bars</summary>
+      <description>On the music card.</description>
+    </key>
+    <key name="visualizer-placement" type="s">
+      <choices>
+        <choice value="card"/>
+        <choice value="bottom"/>
+        <choice value="hidden"/>
+      </choices>
+      <default>'card'</default>
+      <summary>Where the visualizer shows</summary>
+      <description>card: on the music card. bottom: along the bottom edge of every monitor, above all windows, with no background; clicks go through it. hidden: nowhere, and cava doesn't run.</description>
+    </key>
+    <key name="visualizer-bottom-bars" type="i">
+      <range min="32" max="256"/>
+      <default>96</default>
+      <summary>Number of visualizer bars at the bottom of the screen</summary>
     </key>
     <key name="bluetooth-audio-fix" type="b">
       <default>true</default>
