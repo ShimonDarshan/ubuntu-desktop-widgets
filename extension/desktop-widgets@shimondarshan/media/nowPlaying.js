@@ -8,6 +8,7 @@ import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
 import {Artwork, neutralColors} from './artwork.js';
 import {Players} from './mpris.js';
+import {isMusicPlayer} from './musicSources.js';
 
 export class NowPlaying extends Signals.EventEmitter {
     constructor() {
@@ -16,13 +17,17 @@ export class NowPlaying extends Signals.EventEmitter {
         // {path, colors} of the active player's cover, or null for none.
         this.cover = null;
         this._artKey = null;
+        this._activePlaying = false;
         this._artwork = new Artwork();
         this._players = new Players();
         this._players.connect('changed', (_o, player) => {
             // A player that starts playing takes over, unless the one shown
-            // is playing too.
+            // is playing too. When the one shown stops, one still playing
+            // takes over; a paused player picked with the dots stays.
             if (player?.playing && !this.active?.playing)
                 this.active = player;
+            else if (player === this.active && this._activePlaying && !player.playing)
+                this.active = this.players.find(p => p.playing) ?? player;
             this._sync();
         });
     }
@@ -33,6 +38,11 @@ export class NowPlaying extends Signals.EventEmitter {
 
     get playing() {
         return this.players.some(p => p.playing);
+    }
+
+    // Spotify, or Spotify Web or YouTube in a browser, is playing.
+    get musicPlaying() {
+        return this.players.some(p => p.playing && isMusicPlayer(p));
     }
 
     // The cover's colors, white and silver while there is no cover, or null
@@ -56,6 +66,7 @@ export class NowPlaying extends Signals.EventEmitter {
         const players = this.players;
         if (!players.includes(this.active))
             this.active = players.find(p => p.playing) ?? players[0] ?? null;
+        this._activePlaying = !!this.active?.playing;
         this._syncArt(this.active);
         this.emit('changed');
     }

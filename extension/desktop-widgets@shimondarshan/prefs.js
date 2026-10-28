@@ -68,6 +68,8 @@ export default class DesktopWidgetsPreferences extends ExtensionPreferences {
         visualizer.add(comboRow(settings, 'visualizer-placement', 'Show', PLACEMENTS,
             'Bottom of the screen: above all windows on every monitor, see-through, clicks go through it'));
         visualizer.add(comboRow(settings, 'visualizer-style', 'Style', STYLES));
+        visualizer.add(switchRow(settings, 'visualizer-music-only', 'Only for Spotify and YouTube',
+            'Other sites, games and calls don\'t wake the bars. While music plays, the bars follow all the sound together'));
 
         const bars = Adw.SpinRow.new_with_range(12, 64, 1);
         bars.title = 'Bars on the card';

@@ -62,6 +62,11 @@
       <summary>Where the visualizer shows</summary>
       <description>card: on the music card. bottom: along the bottom edge of every monitor, above all windows, with no background; clicks go through it. hidden: nowhere, and cava doesn't run.</description>
     </key>
+    <key name="visualizer-music-only" type="b">
+      <default>true</default>
+      <summary>Show the visualizer only for Spotify and YouTube</summary>
+      <description>When on, the bars move only while the Spotify app, or Spotify Web or YouTube in a browser, plays. Other sites (X, ...), games and calls don't wake them, though while Spotify or YouTube plays the bars follow all the sound together. When off, any sound counts.</description>
+    </key>
     <key name="visualizer-bottom-bars" type="i">
       <range min="32" max="256"/>
       <default>96</default>

@@ -18,6 +18,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {BluetoothAudioFixer} from './media/bluetoothAudio.js';
 import {hideCavaFromMicIndicator} from './media/micIndicator.js';
 import {NowPlaying} from './media/nowPlaying.js';
+import {OutputStreams} from './media/outputStreams.js';
 import {ScreenVisualizer} from './media/screenVisualizer.js';
 import {CavaFeed} from './media/visualizer.js';
 import {MediaWidget} from './media/widget.js';
@@ -51,6 +52,8 @@ export default class DesktopWidgetsExtension extends Extension {
         // and covers, one cava.
         this._nowPlaying = new NowPlaying();
         this._feed = new CavaFeed();
+        this._outputStreams = new OutputStreams();
+        this._outputStreams.connectObject('changed', () => this._syncPlaying(), this);
         this._nowPlaying.connectObject(
             'changed', () => this._syncPlaying(),
             'art-changed', () => this._screenVisualizer?.setColors(this._nowPlaying.colors), this);
@@ -59,6 +62,7 @@ export default class DesktopWidgetsExtension extends Extension {
             'changed::visualizer-placement', () => this._syncVisualizer(),
             'changed::visualizer-bars', () => this._syncVisualizer(),
             'changed::visualizer-bottom-bars', () => this._syncVisualizer(),
+            'changed::visualizer-music-only', () => this._syncPlaying(),
             'changed::visualizer-style', () => this._screenVisualizer?.setStyle(
                 this._settings.get_string('visualizer-style')),
             'changed::media-on-top', () => this._place(),
@@ -96,6 +100,9 @@ export default class DesktopWidgetsExtension extends Extension {
         this._screenVisualizer?.destroy();
         this._screenVisualizer = null;
         this._nowPlaying.disconnectObject(this);
+        this._outputStreams.disconnectObject(this);
+        this._outputStreams.destroy();
+        this._outputStreams = null;
         this._feed.destroy();
         this._feed = null;
         this._nowPlaying.destroy();
@@ -122,8 +129,13 @@ export default class DesktopWidgetsExtension extends Extension {
         this._screenVisualizer.setPlaying(this._nowPlaying.playing);
     }
 
+    // The bars move while a player plays or any app sends sound to the
+    // speakers (a Firefox tab can play while its player says Paused); with
+    // "only for Spotify and YouTube", only while one of those does.
     _syncPlaying() {
-        const playing = this._nowPlaying.playing;
+        const playing = this._settings.get_boolean('visualizer-music-only')
+            ? this._nowPlaying.musicPlaying || this._outputStreams.musicRunning
+            : this._nowPlaying.playing || this._outputStreams.running;
         this._feed.setPlaying(playing);
         this._screenVisualizer?.setPlaying(playing);
     }

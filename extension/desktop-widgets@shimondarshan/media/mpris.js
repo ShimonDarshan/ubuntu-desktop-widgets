@@ -54,6 +54,8 @@ class Player extends Signals.EventEmitter {
         this.title = '';
         this.artists = [];
         this.artUrl = '';
+        // The page playing, for browsers.
+        this.url = '';
         this.trackId = '';
         this.lengthUs = 0;
         this.status = 'Stopped';
@@ -164,6 +166,7 @@ class Player extends Signals.EventEmitter {
             ? artists : [];
         this.title = typeof metadata['xesam:title'] === 'string' ? metadata['xesam:title'] : '';
         this.artUrl = typeof metadata['mpris:artUrl'] === 'string' ? metadata['mpris:artUrl'] : '';
+        this.url = typeof metadata['xesam:url'] === 'string' ? metadata['xesam:url'] : '';
         this.trackId = typeof metadata['mpris:trackid'] === 'string' ? metadata['mpris:trackid'] : '';
         this.lengthUs = Number(metadata['mpris:length']) || 0;
         this.status = this._player.PlaybackStatus ?? 'Stopped';

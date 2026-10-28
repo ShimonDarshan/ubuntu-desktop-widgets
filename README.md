@@ -50,7 +50,20 @@ The bar heights come from [cava](https://github.com/karlstav/cava). The
 extension starts it with its own config (`~/.cache/desktop-widgets/cava.conf`:
 PipeWire input, raw output, mono) only while something is playing and the bars
 are on screen (on the shown card, or at the bottom of the screen), and stops it
-on pause. One cava feeds the card and every monitor's strip. Without cava the card still works, with still
+on pause. One cava feeds the card and every monitor's strip.
+
+"Playing" means a player says so, or any app is sending sound to the speakers
+(`pactl`, event sounds left out). Firefox shows one player for all its tabs:
+when an X video takes it over and pauses, Spotify Web can go on playing in
+another tab, and the bars keep following it. The card can only control the tab
+Firefox's player points at.
+
+By default ("Only for Spotify and YouTube" in Settings) only the Spotify app,
+Spotify Web and YouTube (and YouTube Music) wake the bars: a player is known by
+its page address, a browser's sound stream by its tab title ("… - YouTube",
+"Spotify – …", "Song • Artist"). X, other sites, games and calls don't. cava
+hears all the sound together, so while music plays an X video alongside it
+still moves the bars. Without cava the card still works, with still
 bars.
 
 cava is started with `PIPEWIRE_LATENCY=1024/48000` so it never lowers the audio
@@ -81,6 +94,8 @@ extension/desktop-widgets@shimondarshan/
   media/volume.js       main output volume and its name
   media/artwork.js      caches covers, picks their colors
   media/nowPlaying.js   the player shown, its cover and colors (card and strips)
+  media/outputStreams.js  whether any app is playing sound (pactl)
+  media/musicSources.js   which players and streams count as Spotify / YouTube
   media/color.js        color helpers
   media/visualizer.js   runs cava, draws the bars
   media/screenVisualizer.js  the bars along the bottom of every monitor
