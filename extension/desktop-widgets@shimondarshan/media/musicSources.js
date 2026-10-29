@@ -13,17 +13,30 @@ const YOUTUBE_TITLE = /- YouTube( Music)?$/;
 const SPOTIFY_TITLE = /^Spotify\b/;
 const TRACK_TITLE = / • /;
 
-function hostOf(url) {
+function parse(url) {
     try {
-        return GLib.Uri.parse(url, GLib.UriFlags.NONE).get_host()?.replace(/^(www|m)\./, '') ?? '';
+        return GLib.Uri.parse(url, GLib.UriFlags.NONE);
     } catch {
-        return '';
+        return null;
     }
+}
+
+function hostOf(url) {
+    return parse(url)?.get_host()?.replace(/^(www|m)\./, '') ?? '';
 }
 
 export function isMusicPlayer(player) {
     return player.busName === SPOTIFY_APP || player.busName.startsWith(`${SPOTIFY_APP}.`) ||
         MUSIC_HOSTS.includes(hostOf(player.url));
+}
+
+// A YouTube page that isn't a video (home, search, a channel...), where
+// hovering a thumbnail plays a muted preview. Firefox has one player for all
+// its tabs, so the preview would take it over from the music playing.
+export function isPreviewPage(url) {
+    const uri = parse(url);
+    return hostOf(url) === 'youtube.com' &&
+        !/^\/(watch|shorts|live|embed)\b/.test(uri.get_path());
 }
 
 // app is the stream's application.name, title its media.name.

@@ -9,6 +9,8 @@ import Shell from 'gi://Shell';
 
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
+import {isPreviewPage} from './musicSources.js';
+
 const PREFIX = 'org.mpris.MediaPlayer2.';
 const PATH = '/org/mpris/MediaPlayer2';
 const PLAYER_IFACE = 'org.mpris.MediaPlayer2.Player';
@@ -159,6 +161,10 @@ class Player extends Signals.EventEmitter {
         const metadata = {};
         for (const [key, value] of Object.entries(this._player.Metadata ?? {}))
             metadata[key] = value.recursiveUnpack();
+
+        // A YouTube hover preview: keep showing what played before it.
+        if (typeof metadata['xesam:url'] === 'string' && isPreviewPage(metadata['xesam:url']))
+            return;
 
         // Some players send malformed metadata; keep only what matches the spec.
         const artists = metadata['xesam:artist'];
